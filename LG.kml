@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document id="13Bws6pI51Pvg5iryKktNuv0rVSkTTbwW">
+	<name>LG</name>
+	<description>fabrica da LG
+Fazenda Rio Grande</description>
+	<gx:CascadingStyle kml:id="__managed_style_E659C2B1463E61D88A58">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>3</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>00ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_DDA55B9E9F3E61D88A58">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>2</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>00ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_CED7E5A0393E61D88A58">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_DDA55B9E9F3E61D88A58</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_E659C2B1463E61D88A58</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Placemark id="0E95A0E106302D63A2D9">
+		<name>fabrica</name>
+		<LookAt>
+			<longitude>-49.26913047456901</longitude>
+			<latitude>-25.6542240585517</latitude>
+			<altitude>899.419102627685</altitude>
+			<heading>-32.94535180374567</heading>
+			<tilt>1.68205199455631</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>1865.886862967746</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_CED7E5A0393E61D88A58</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						-49.27611594951814,-25.65389737392369,0 -49.27225916259041,-25.65927865912904,0 -49.2665496988016,-25.65626204074041,0 -49.26314397095413,-25.65274031423323,0 -49.26487564427529,-25.64963045260158,0 -49.26753465054535,-25.6517909009053,0 -49.26980650421611,-25.65028702056066,0 -49.27611594951814,-25.65389737392369,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="0579C7F9553E61DA30EB">
+		<name>canteiro</name>
+		<LookAt>
+			<longitude>-49.27585603671484</longitude>
+			<latitude>-25.65257575084498</latitude>
+			<altitude>903.9960867905952</altitude>
+			<heading>-32.94373858087418</heading>
+			<tilt>1.680960068419745</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>404.6260002662893</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_CED7E5A0393E61D88A58</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						-49.27597395624376,-25.65191548999624,0 -49.27646520061506,-25.65206804042388,0 -49.27667831597702,-25.65222824288468,0 -49.2766989359307,-25.65240800941251,0 -49.27654328345446,-25.65262344251612,0 -49.27616720418083,-25.65261337105192,0 -49.27592659788439,-25.65247827536245,0 -49.2756691434347,-25.65232906119475,0 -49.27597395624376,-25.65191548999624,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>
