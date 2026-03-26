@@ -16,5 +16,10 @@ a entregra sera graficos do plotly:
  - curvas de nivel no plano
  - delhade de um corte dos platos
  - 3d surfice do primitivo como o solo estado natural
+ - 
 
-tabela com 
+
+tabela com dados de corte e aterro por segmento
+- necessidade de bota fora
+- necessidade de solo importado
+
