@@ -52,16 +52,15 @@ def criar_mapa_contorno(
             y=superficie.grade_y - oy,
             z=superficie.elevacao_malha,
             contours=dict(
-                start=cota_projeto,
-                end=cota_projeto,
-                size=0,
+                type="constraint",
+                operation="=",
+                value=cota_projeto,
                 showlabels=True,
                 labelfont=dict(size=12, color="white"),
             ),
-            colorscale=[[0, "red"], [1, "red"]],
-            line=dict(width=3),
+            line=dict(width=3, color="red"),
             showscale=False,
-            name="Cota projeto",
+            name="Cota projeto ({:.2f} m)".format(cota_projeto),
             hoverinfo="name+z",
         ))
 

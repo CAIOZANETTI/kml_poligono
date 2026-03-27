@@ -3,7 +3,6 @@
 from typing import Tuple
 
 import numpy as np
-from shapely.geometry import Polygon
 
 from modulos.geometria import GradePoligono
 from modulos.terreno import SuperficieTerreno
