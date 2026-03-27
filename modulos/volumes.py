@@ -202,33 +202,44 @@ def calcular_volumes_por_faixas(
     num_faixas: int = 10,
     remocao_vegetal: float = 0.30,
     categoria: CategoriaSolo = CategoriaSolo.PRIMEIRA,
+    direcao: str = "norte_sul",
 ) -> List[Dict]:
     """Divide o poligono em faixas e calcula volumes por segmento.
 
-    Divide ao longo do eixo Y em faixas horizontais.
+    Args:
+        direcao: 'norte_sul' (faixas ao longo de Y) ou 'leste_oeste' (ao longo de X).
 
     Returns:
-        Lista de dicts: {faixa, posicao_y, vol_corte, vol_aterro, balanco}
+        Lista de dicts com volumes por faixa.
     """
     pontos = superficie.pontos_grade_xy
     elevacoes = superficie.elevacao_grade
     area_celula = espacamento ** 2
 
     mascara_valida = ~np.isnan(elevacoes)
-    ys_validos = pontos[mascara_valida, 1]
+    coords_validos = pontos[mascara_valida]
     elev_validos = elevacoes[mascara_valida]
 
-    y_min, y_max = float(ys_validos.min()), float(ys_validos.max())
-    limites = np.linspace(y_min, y_max, num_faixas + 1)
+    # Eixo de corte: Y para norte-sul, X para leste-oeste
+    if direcao == "leste_oeste":
+        eixo_idx = 0  # corta ao longo de X
+        eixo_nome = "x"
+    else:
+        eixo_idx = 1  # corta ao longo de Y
+        eixo_nome = "y"
+
+    eixo_validos = coords_validos[:, eixo_idx]
+    eixo_min, eixo_max = float(eixo_validos.min()), float(eixo_validos.max())
+    limites = np.linspace(eixo_min, eixo_max, num_faixas + 1)
 
     fator_emp = obter_fator_empolamento(categoria)
     fator_hom = obter_fator_homogeneizacao(categoria)
 
     faixas = []
     for i in range(num_faixas):
-        mascara_faixa = (ys_validos >= limites[i]) & (ys_validos < limites[i + 1])
+        mascara_faixa = (eixo_validos >= limites[i]) & (eixo_validos < limites[i + 1])
         if i == num_faixas - 1:
-            mascara_faixa = (ys_validos >= limites[i]) & (ys_validos <= limites[i + 1])
+            mascara_faixa = (eixo_validos >= limites[i]) & (eixo_validos <= limites[i + 1])
 
         elev_faixa = elev_validos[mascara_faixa]
         if len(elev_faixa) == 0:
@@ -240,13 +251,14 @@ def calcular_volumes_por_faixas(
         vol_corte = float(np.sum(np.abs(delta[delta < 0])) * area_celula)
         vol_aterro = float(np.sum(delta[delta > 0]) * area_celula)
 
-        posicao_y = (limites[i] + limites[i + 1]) / 2.0
+        posicao = (limites[i] + limites[i + 1]) / 2.0
 
         faixas.append({
             "faixa": i + 1,
-            "posicao_y": posicao_y,
-            "y_inicio": limites[i],
-            "y_fim": limites[i + 1],
+            "posicao": posicao,
+            "inicio": limites[i],
+            "fim": limites[i + 1],
+            "direcao": direcao,
             "vol_corte": vol_corte,
             "vol_aterro": vol_aterro,
             "vol_corte_empolado": vol_corte * fator_emp,
@@ -256,3 +268,64 @@ def calcular_volumes_por_faixas(
         })
 
     return faixas
+
+
+def extrair_perfil_faixa(
+    superficie: SuperficieTerreno,
+    faixa: Dict,
+    cota_projeto: float,
+    espacamento: float,
+    remocao_vegetal: float = 0.30,
+) -> Dict:
+    """Extrai perfil de terreno e projeto ao longo de uma faixa.
+
+    Returns:
+        Dict com 'posicoes', 'terreno', 'projeto', 'delta' arrays.
+    """
+    pontos = superficie.pontos_grade_xy
+    elevacoes = superficie.elevacao_grade
+    mascara_valida = ~np.isnan(elevacoes)
+
+    direcao = faixa.get("direcao", "norte_sul")
+    inicio = faixa["inicio"]
+    fim = faixa["fim"]
+
+    if direcao == "leste_oeste":
+        eixo_corte = 0  # filtra por X
+        eixo_perfil = 1  # perfil ao longo de Y
+    else:
+        eixo_corte = 1  # filtra por Y
+        eixo_perfil = 0  # perfil ao longo de X
+
+    # Pontos dentro da faixa
+    mascara_faixa = (
+        mascara_valida
+        & (pontos[:, eixo_corte] >= inicio)
+        & (pontos[:, eixo_corte] <= fim)
+    )
+
+    pos = pontos[mascara_faixa, eixo_perfil]
+    elev = elevacoes[mascara_faixa]
+
+    # Ordena por posicao
+    ordem = np.argsort(pos)
+    pos = pos[ordem]
+    elev = elev[ordem]
+
+    # Agrupa por posicao (media das elevacoes no mesmo ponto do eixo)
+    pos_unicos = np.unique(pos)
+    elev_media = np.array([
+        float(np.mean(elev[pos == p])) for p in pos_unicos
+    ])
+
+    terreno_ajustado = elev_media - remocao_vegetal
+    projeto = np.full_like(elev_media, cota_projeto)
+    delta = cota_projeto - terreno_ajustado
+
+    return {
+        "posicoes": pos_unicos,
+        "terreno": elev_media,
+        "terreno_ajustado": terreno_ajustado,
+        "projeto": projeto,
+        "delta": delta,
+    }

@@ -53,7 +53,7 @@ def construir_diagrama_bruckner(
     volumes_acum = np.zeros(n + 1)
 
     for i, faixa in enumerate(volumes_faixas):
-        posicoes[i + 1] = faixa["posicao_y"]
+        posicoes[i + 1] = faixa.get("posicao", faixa.get("posicao_y", 0))
         balanco_faixa = (
             faixa["vol_corte"] * fator_empolamento
             - faixa["vol_aterro"] * fator_homogeneizacao
@@ -61,7 +61,7 @@ def construir_diagrama_bruckner(
         volumes_acum[i + 1] = volumes_acum[i] + balanco_faixa
 
     # Posicao inicial = primeira faixa
-    posicoes[0] = volumes_faixas[0].get("y_inicio", posicoes[1] - 1.0)
+    posicoes[0] = volumes_faixas[0].get("inicio", posicoes[1] - 1.0)
 
     # Encontra pontos de equilibrio (zero-crossings)
     pontos_eq = _encontrar_cruzamentos_zero(posicoes, volumes_acum)
@@ -100,7 +100,7 @@ def calcular_dmt(
         return 0.0
 
     # Centroide de massa
-    posicoes = np.array([f["posicao_y"] for f in volumes_faixas])
+    posicoes = np.array([f.get("posicao", f.get("posicao_y", 0)) for f in volumes_faixas])
     balancos = np.array([
         f["vol_corte"] * fator_empolamento - f["vol_aterro"] * fator_homogeneizacao
         for f in volumes_faixas
@@ -148,7 +148,7 @@ def identificar_zonas_transporte(
         # Volume nesta zona
         mascara = [
             f for f in resultado.faixas
-            if f["posicao_y"] >= inicio and f["posicao_y"] <= fim
+            if f.get("posicao", f.get("posicao_y", 0)) >= inicio and f.get("posicao", f.get("posicao_y", 0)) <= fim
         ]
         vol_total = sum(f.get("balanco", 0) for f in mascara)
 

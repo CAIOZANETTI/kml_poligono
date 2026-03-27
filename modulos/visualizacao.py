@@ -446,3 +446,88 @@ def criar_grafico_barras_volumes(
         height=500,
     )
     return fig
+
+
+def criar_perfil_faixa(
+    perfil: dict,
+    faixa: dict,
+    titulo: str = "Perfil da Faixa",
+) -> go.Figure:
+    """Cria grafico de perfil (corte transversal) de uma faixa selecionada."""
+    pos = perfil["posicoes"]
+    terreno = perfil["terreno"]
+    terreno_aj = perfil["terreno_ajustado"]
+    projeto = perfil["projeto"]
+    delta = perfil["delta"]
+
+    direcao = faixa.get("direcao", "norte_sul")
+    eixo_label = "Easting (m)" if direcao == "norte_sul" else "Northing (m)"
+
+    fig = go.Figure()
+
+    # Terreno natural
+    fig.add_trace(go.Scatter(
+        x=pos, y=terreno,
+        mode="lines",
+        name="Terreno Natural",
+        line=dict(color="#8B4513", width=2),
+    ))
+
+    # Terreno ajustado
+    fig.add_trace(go.Scatter(
+        x=pos, y=terreno_aj,
+        mode="lines",
+        name="Terreno Ajustado",
+        line=dict(color="#A0522D", width=1, dash="dash"),
+    ))
+
+    # Projeto
+    cota = float(projeto[0]) if len(projeto) > 0 else 0
+    fig.add_trace(go.Scatter(
+        x=pos, y=projeto,
+        mode="lines",
+        name="Projeto ({:.2f}m)".format(cota),
+        line=dict(color="#1E88E5", width=3),
+    ))
+
+    # Preenchimento corte (terreno acima do projeto)
+    corte_y = np.where(delta < 0, terreno_aj, projeto)
+    fig.add_trace(go.Scatter(
+        x=pos, y=corte_y,
+        mode="lines",
+        line=dict(width=0),
+        showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=pos, y=projeto,
+        fill="tonexty",
+        fillcolor="rgba(198,40,40,0.3)",
+        line=dict(width=0),
+        name="Corte",
+    ))
+
+    # Preenchimento aterro (terreno abaixo do projeto)
+    aterro_y = np.where(delta > 0, terreno_aj, projeto)
+    fig.add_trace(go.Scatter(
+        x=pos, y=projeto,
+        mode="lines",
+        line=dict(width=0),
+        showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=pos, y=aterro_y,
+        fill="tonexty",
+        fillcolor="rgba(30,136,229,0.3)",
+        line=dict(width=0),
+        name="Aterro",
+    ))
+
+    fig.update_layout(
+        title=titulo,
+        xaxis_title=eixo_label,
+        yaxis_title="Eleva\u00e7\u00e3o (m)",
+        template="plotly_white",
+        height=450,
+        legend=dict(x=0.01, y=0.99),
+    )
+    return fig
