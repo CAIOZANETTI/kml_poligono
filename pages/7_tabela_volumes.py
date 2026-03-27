@@ -4,12 +4,11 @@ import streamlit as st
 import pandas as pd
 from modulos.estado import pagina_requer_dados, obter_dados
 from modulos.visualizacao import criar_tabela_volumes, criar_grafico_barras_volumes
-from modulos.tema import section_header
 
 pagina_requer_dados()
 dados = obter_dados()
 
-st.title("Volumes")
+st.subheader("Volumes")
 
 lista_res = list(dados["resultados"].values())
 
@@ -19,7 +18,8 @@ st.plotly_chart(fig_tabela, use_container_width=True)
 fig_barras = criar_grafico_barras_volumes(lista_res)
 st.plotly_chart(fig_barras, use_container_width=True)
 
-section_header("detalhamento")
+st.divider()
+st.subheader("Detalhamento")
 df = pd.DataFrame([
     {
         "Poligono": r.nome_poligono,

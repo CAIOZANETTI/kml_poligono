@@ -6,7 +6,6 @@ para persistir entre navegacoes de pagina.
 """
 
 import streamlit as st
-from modulos.tema import aplicar_tema
 
 st.set_page_config(
     page_title="Terraplenagem KML",
@@ -14,8 +13,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
-aplicar_tema()
 
 # ─── Pages ───
 pg_home = st.Page("pages/1_home.py", title="Home", default=True)
