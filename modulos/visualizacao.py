@@ -111,6 +111,11 @@ def criar_superficie_3d(
         connectgaps=True,
     ))
 
+    fig.update_traces(contours_z=dict(
+        show=True, usecolormap=True,
+        highlightcolor="limegreen", project_z=True,
+    ))
+
     if grade is not None:
         borda = grade.pontos_borda
         borda_fechada = np.vstack([borda, borda[0:1]])
@@ -135,9 +140,11 @@ def criar_superficie_3d(
             yaxis_title="Northing (m)",
             zaxis_title=z_label,
             aspectmode="data",
+            camera=dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
         ),
         template=_TEMPLATE,
         height=700,
+        margin=dict(l=65, r=50, b=65, t=90),
     )
     return fig
 
