@@ -35,7 +35,7 @@ with col_dir:
     direcao_key = "norte_sul" if "Norte" in direcao else "leste_oeste"
 
 with col_faixas:
-    num_faixas = st.number_input(
+    num_faixas = st.slider(
         "N\u00famero de faixas",
         min_value=3, max_value=50, value=15, step=1,
         key="num_faixas_brk",
