@@ -77,7 +77,7 @@ PLOTLY_SCENE = dict(
 
 def aplicar_tema():
     """Injeta CSS minimalista global. Chamar uma vez no app.py."""
-    st.markdown("""
+    st.html("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
@@ -276,14 +276,13 @@ def aplicar_tema():
             color: #a1a1aa !important;
         }
     </style>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def section_header(texto: str):
     """Header de secao minimalista (uppercase micro-label)."""
-    st.markdown(
+    st.html(
         '<div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;'
         'letter-spacing:0.06em;color:#a1a1aa;margin-top:1.5rem;margin-bottom:0.5rem;'
         'padding-bottom:0.4rem;border-bottom:1px solid #f4f4f5;">{}</div>'.format(texto),
-        unsafe_allow_html=True,
     )
