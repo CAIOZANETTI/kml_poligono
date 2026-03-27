@@ -7,13 +7,13 @@ from modulos.visualizacao import criar_comparacao_3d
 pagina_requer_dados()
 dados = obter_dados()
 
-st.header("\U0001f4ca Terreno Natural vs Projeto")
+st.title("Terreno natural vs projeto")
 
 nome = seletor_poligono("comp")
 fig = criar_comparacao_3d(
     dados["superficies"][nome],
     dados["cotas"][nome],
     dados["remocao_vegetal"],
-    titulo="Terreno vs Projeto - {}".format(nome),
+    titulo="terreno vs projeto — {}".format(nome),
 )
 st.plotly_chart(fig, use_container_width=True)

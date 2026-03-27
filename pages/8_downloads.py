@@ -12,11 +12,13 @@ from modulos.visualizacao import (
 from modulos.relatorio import gerar_relatorio_html
 from modulos.volumes import calcular_volumes_por_faixas
 from modulos.parametros import NOMES_CATEGORIA
+from modulos.tema import section_header
 
 pagina_requer_dados()
 dados = obter_dados()
 
-st.header("\U0001f4e5 Exportar Relat\u00f3rios")
+st.title("Downloads")
+st.caption("exporte relatorios e planilhas")
 
 lista_res = list(dados["resultados"].values())
 nomes = list(dados["resultados"].keys())
@@ -48,26 +50,22 @@ figuras["Volumes por Pol\u00edgono"] = criar_grafico_barras_volumes(lista_res)
 
 relatorios = gerar_relatorio_html(lista_res, figuras, parametros)
 
-st.markdown("---")
+section_header("relatorios")
 
-# Memorial Gerencial
 st.download_button(
-    label="\U0001f4cb Baixar Memorial Gerencial (.html)",
+    label="Memorial gerencial (.html)",
     data=relatorios["gerencial"].encode("utf-8"),
     file_name="memorial_gerencial_terraplenagem.html",
     mime="text/html",
     use_container_width=True,
-    type="primary",
 )
 
-# Memorial Analitico
 st.download_button(
-    label="\U0001f4ca Baixar Memorial Anal\u00edtico (.html)",
+    label="Memorial analitico (.html)",
     data=relatorios["analitico"].encode("utf-8"),
     file_name="memorial_analitico_terraplenagem.html",
     mime="text/html",
     use_container_width=True,
-    type="primary",
 )
 
 # Planilha Excel
@@ -75,20 +73,20 @@ buffer_xlsx = io.BytesIO()
 with pd.ExcelWriter(buffer_xlsx, engine="openpyxl") as writer:
     df_resumo = pd.DataFrame([
         {
-            "Pol\u00edgono": r.nome_poligono,
+            "Poligono": r.nome_poligono,
             "Cota Projeto (m)": r.cota_projeto,
-            "Eleva\u00e7\u00e3o M\u00e9dia (m)": r.elevacao_media_terreno,
-            "\u00c1rea Total (m\u00b2)": r.area_total,
-            "\u00c1rea Corte (m\u00b2)": r.area_corte,
-            "\u00c1rea Aterro (m\u00b2)": r.area_aterro,
+            "Elevacao Media (m)": r.elevacao_media_terreno,
+            "Area Total (m\u00b2)": r.area_total,
+            "Area Corte (m\u00b2)": r.area_corte,
+            "Area Aterro (m\u00b2)": r.area_aterro,
             "Corte Bruto (m\u00b3)": r.volume_corte_bruto,
             "Aterro Bruto (m\u00b3)": r.volume_aterro_bruto,
             "Corte Empolado (m\u00b3)": r.volume_corte_empolado,
             "Aterro Compactado (m\u00b3)": r.volume_aterro_compactado,
             "Bota-fora (m\u00b3)": r.volume_bota_fora,
             "Solo Importado (m\u00b3)": r.volume_solo_importado,
-            "Balan\u00e7o (m\u00b3)": r.balanco_massa,
-            "Remo\u00e7\u00e3o Vegetal (m)": r.remocao_vegetal,
+            "Balanco (m\u00b3)": r.balanco_massa,
+            "Remocao Vegetal (m)": r.remocao_vegetal,
             "Categoria Solo": NOMES_CATEGORIA[r.categoria_solo],
         }
         for r in lista_res
@@ -111,10 +109,9 @@ with pd.ExcelWriter(buffer_xlsx, engine="openpyxl") as writer:
         df_faixas.to_excel(writer, sheet_name="Faixas", index=False)
 
 st.download_button(
-    label="\U0001f4c4 Baixar Planilha Excel (.xlsx)",
+    label="Planilha excel (.xlsx)",
     data=buffer_xlsx.getvalue(),
     file_name="terraplenagem_volumes.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True,
-    type="primary",
 )

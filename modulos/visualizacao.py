@@ -1,4 +1,4 @@
-"""Visualizacoes Plotly para terraplenagem."""
+"""Visualizacoes Plotly para terraplenagem — tema minimalista."""
 
 import numpy as np
 import pandas as pd
@@ -10,11 +10,20 @@ from modulos.terreno import SuperficieTerreno, gerar_superficie_projeto
 from modulos.volumes import ResultadoVolume
 from modulos.bruckner import ResultadoBruckner
 from modulos.geometria import GradePoligono
+from modulos.tema import CORES, PLOTLY_LAYOUT, PLOTLY_SCENE
+
+
+def _aplicar_layout(fig: go.Figure, titulo: str, height: int = 560, **kwargs):
+    """Aplica layout minimalista padrao a uma figura Plotly."""
+    layout = {**PLOTLY_LAYOUT, "height": height}
+    layout["title"] = dict(text=titulo, font=dict(size=14, color="#27272a"), x=0, xanchor="left")
+    layout.update(kwargs)
+    fig.update_layout(**layout)
 
 
 def criar_mapa_contorno(
     superficie: SuperficieTerreno,
-    titulo: str = "Curvas de N\u00edvel",
+    titulo: str = "curvas de nivel",
 ) -> go.Figure:
     """Cria mapa de curvas de nivel do terreno natural."""
     fig = go.Figure(data=go.Contour(
@@ -24,21 +33,17 @@ def criar_mapa_contorno(
         colorscale="Earth",
         contours=dict(
             showlabels=True,
-            labelfont=dict(size=10, color="white"),
+            labelfont=dict(size=9, color="white"),
         ),
-        colorbar=dict(title="Eleva\u00e7\u00e3o (m)"),
+        colorbar=dict(title="elev. (m)", titlefont=dict(size=10), tickfont=dict(size=9)),
     ))
 
-    fig.update_layout(
-        title=titulo,
-        xaxis_title="Easting (m)",
-        yaxis_title="Northing (m)",
-        yaxis_scaleanchor="x",
-        template="plotly_white",
-        height=600,
-    )
+    _aplicar_layout(fig, titulo, height=560,
+                    yaxis_scaleanchor="x")
     return fig
 
+
+# ── Helpers 3D: exagero vertical e elevacao relativa ──
 
 def _preparar_z_3d(
     elevacao_malha: np.ndarray,
@@ -57,23 +62,26 @@ def _preparar_z_3d(
     """
     if cota_referencia is not None:
         z_data = elevacao_malha - cota_referencia
-        z_label = "Altura (m) [- corte / + aterro]"
-        # Escala divergente: vermelho=corte(negativo), azul=aterro(positivo)
+        z_label = "altura (m) [- corte / + aterro]"
         colorscale = "RdBu"
         vmax = float(np.nanmax(np.abs(z_data)))
-        colorbar = dict(title="Altura (m)<br>- Corte / + Aterro")
+        colorbar = dict(
+            title="altura (m)", titlefont=dict(size=10), tickfont=dict(size=9),
+        )
         if exagero_vertical > 1:
             z_data = z_data * exagero_vertical
             z_label += " ({}x)".format(exagero_vertical)
         return z_data, z_label, colorscale, colorbar
     else:
         z_data = elevacao_malha
-        z_label = "Eleva\u00e7\u00e3o (m)"
+        z_label = "elev. (m)"
         if exagero_vertical > 1:
             z_media = float(np.nanmean(z_data))
             z_data = (z_data - z_media) * exagero_vertical + z_media
             z_label += " (exagero {}x)".format(exagero_vertical)
-        return z_data, z_label, None, dict(title="Eleva\u00e7\u00e3o (m)")
+        return z_data, z_label, None, dict(
+            title="elev. (m)", titlefont=dict(size=10), tickfont=dict(size=9),
+        )
 
 
 def _preparar_z_borda(
@@ -96,7 +104,7 @@ def _preparar_z_borda(
 def criar_superficie_3d(
     superficie: SuperficieTerreno,
     grade: Optional[GradePoligono] = None,
-    titulo: str = "Terreno Natural 3D",
+    titulo: str = "terreno 3d",
     exagero_vertical: int = 1,
     cota_referencia: Optional[float] = None,
 ) -> go.Figure:
@@ -113,11 +121,10 @@ def criar_superficie_3d(
         z=z_data,
         colorscale=colorscale or "Earth",
         colorbar=colorbar,
-        name="Terreno Natural",
+        name="terreno natural",
         connectgaps=True,
     ))
 
-    # Contorno da borda
     if grade is not None:
         borda = grade.pontos_borda
         borda_fechada = np.vstack([borda, borda[0:1]])
@@ -130,21 +137,21 @@ def criar_superficie_3d(
             y=borda_fechada[:, 1],
             z=borda_z,
             mode="lines+markers",
-            line=dict(color="red", width=4),
-            marker=dict(size=3, color="red"),
-            name="Borda do Pol\u00edgono",
+            line=dict(color=CORES["corte"], width=3),
+            marker=dict(size=2, color=CORES["corte"]),
+            name="borda",
         ))
 
+    scene = {**PLOTLY_SCENE, "aspectmode": "data",
+             "xaxis": {**PLOTLY_SCENE["xaxis"], "title": "easting (m)"},
+             "yaxis": {**PLOTLY_SCENE["yaxis"], "title": "northing (m)"},
+             "zaxis": {**PLOTLY_SCENE["zaxis"], "title": z_label}}
+
     fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="Easting (m)",
-            yaxis_title="Northing (m)",
-            zaxis_title=z_label,
-            aspectmode="data",
-        ),
-        template="plotly_white",
-        height=700,
+        **PLOTLY_LAYOUT,
+        title=dict(text=titulo, font=dict(size=14, color="#27272a"), x=0, xanchor="left"),
+        scene=scene,
+        height=640,
     )
     return fig
 
@@ -152,11 +159,11 @@ def criar_superficie_3d(
 def criar_superficie_3d_contornos(
     superficie: SuperficieTerreno,
     grade: Optional[GradePoligono] = None,
-    titulo: str = "Terreno Natural 3D (Contornos)",
+    titulo: str = "terreno 3d (contornos)",
     exagero_vertical: int = 1,
     cota_referencia: Optional[float] = None,
 ) -> go.Figure:
-    """Cria Surface 3D com contornos projetados no plano Z (estilo topografico)."""
+    """Cria Surface 3D com contornos projetados no plano Z."""
     fig = go.Figure()
 
     z_data, z_label, colorscale, colorbar = _preparar_z_3d(
@@ -168,13 +175,15 @@ def criar_superficie_3d_contornos(
         y=superficie.malha_y,
         z=z_data,
         colorscale=colorscale or "Viridis",
-        colorbar=colorbar if colorscale else dict(title="Elev. (m)"),
-        name="Terreno Natural",
+        colorbar=colorbar if colorscale else dict(
+            title="elev. (m)", titlefont=dict(size=10), tickfont=dict(size=9),
+        ),
+        name="terreno natural",
         connectgaps=True,
         contours_z=dict(
             show=True,
             usecolormap=True,
-            highlightcolor="limegreen",
+            highlightcolor="#a3e635",
             project_z=True,
         ),
     ))
@@ -191,23 +200,22 @@ def criar_superficie_3d_contornos(
             y=borda_fechada[:, 1],
             z=borda_z,
             mode="lines+markers",
-            line=dict(color="red", width=4),
-            marker=dict(size=3, color="red"),
-            name="Borda",
+            line=dict(color=CORES["corte"], width=3),
+            marker=dict(size=2, color=CORES["corte"]),
+            name="borda",
         ))
 
+    scene = {**PLOTLY_SCENE, "aspectmode": "data",
+             "camera": dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
+             "xaxis": {**PLOTLY_SCENE["xaxis"], "title": "easting (m)"},
+             "yaxis": {**PLOTLY_SCENE["yaxis"], "title": "northing (m)"},
+             "zaxis": {**PLOTLY_SCENE["zaxis"], "title": z_label}}
+
     fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="Easting (m)",
-            yaxis_title="Northing (m)",
-            zaxis_title=z_label,
-            aspectmode="data",
-            camera=dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
-        ),
-        template="plotly_white",
-        height=700,
-        margin=dict(l=65, r=50, b=65, t=90),
+        **PLOTLY_LAYOUT,
+        title=dict(text=titulo, font=dict(size=14, color="#27272a"), x=0, xanchor="left"),
+        scene=scene,
+        height=640,
     )
     return fig
 
@@ -216,46 +224,44 @@ def criar_comparacao_3d(
     superficie: SuperficieTerreno,
     cota_projeto: float,
     remocao_vegetal: float = 0.30,
-    titulo: str = "Terreno Natural vs Projeto",
+    titulo: str = "terreno vs projeto",
 ) -> go.Figure:
     """Cria visualizacao 3D comparando terreno com superficie de projeto."""
     fig = go.Figure()
 
-    # Terreno natural (Surface)
     fig.add_trace(go.Surface(
         x=superficie.malha_x,
         y=superficie.malha_y,
         z=superficie.elevacao_malha,
         colorscale="Earth",
         opacity=0.85,
-        name="Terreno Natural",
+        name="terreno natural",
         showscale=False,
         connectgaps=True,
     ))
 
-    # Superficie de projeto (plana na cota)
     superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
     fig.add_trace(go.Surface(
         x=superficie.malha_x,
         y=superficie.malha_y,
         z=superficie_proj,
-        colorscale=[[0, "rgba(30,136,229,0.5)"], [1, "rgba(30,136,229,0.5)"]],
+        colorscale=[[0, "rgba(99,102,241,0.45)"], [1, "rgba(99,102,241,0.45)"]],
         opacity=0.5,
         showscale=False,
-        name="Projeto (cota {:.2f}m)".format(cota_projeto),
+        name="projeto ({:.2f}m)".format(cota_projeto),
         connectgaps=True,
     ))
 
+    scene = {**PLOTLY_SCENE, "aspectmode": "data",
+             "xaxis": {**PLOTLY_SCENE["xaxis"], "title": "easting (m)"},
+             "yaxis": {**PLOTLY_SCENE["yaxis"], "title": "northing (m)"},
+             "zaxis": {**PLOTLY_SCENE["zaxis"], "title": "elev. (m)"}}
+
     fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="Easting (m)",
-            yaxis_title="Northing (m)",
-            zaxis_title="Eleva\u00e7\u00e3o (m)",
-            aspectmode="data",
-        ),
-        template="plotly_white",
-        height=700,
+        **PLOTLY_LAYOUT,
+        title=dict(text=titulo, font=dict(size=14, color="#27272a"), x=0, xanchor="left"),
+        scene=scene,
+        height=640,
     )
     return fig
 
@@ -264,13 +270,12 @@ def criar_mapa_corte_aterro(
     superficie: SuperficieTerreno,
     cota_projeto: float,
     remocao_vegetal: float = 0.30,
-    titulo: str = "Mapa de Corte e Aterro",
+    titulo: str = "corte / aterro",
 ) -> go.Figure:
     """Cria mapa 2D com zonas de corte (vermelho) e aterro (azul)."""
     terreno_ajustado = superficie.elevacao_malha - remocao_vegetal
     delta = cota_projeto - terreno_ajustado
 
-    # Limita escala simetrica
     vmax = max(abs(np.nanmin(delta)), abs(np.nanmax(delta)))
 
     fig = go.Figure(data=go.Heatmap(
@@ -281,17 +286,15 @@ def criar_mapa_corte_aterro(
         zmid=0,
         zmin=-vmax,
         zmax=vmax,
-        colorbar=dict(title="Delta (m)<br>+ Aterro / - Corte"),
+        colorbar=dict(
+            title="delta (m)",
+            titlefont=dict(size=10),
+            tickfont=dict(size=9),
+        ),
     ))
 
-    fig.update_layout(
-        title=titulo,
-        xaxis_title="Easting (m)",
-        yaxis_title="Northing (m)",
-        yaxis_scaleanchor="x",
-        template="plotly_white",
-        height=600,
-    )
+    _aplicar_layout(fig, titulo, height=560,
+                    yaxis_scaleanchor="x")
     return fig
 
 
@@ -303,7 +306,7 @@ def criar_perfil_transversal(
     remocao_vegetal: float = 0.30,
     talude_corte: tuple = (1, 1),
     talude_aterro: tuple = (1, 2),
-    titulo: str = "Perfil Transversal",
+    titulo: str = "perfil transversal",
 ) -> go.Figure:
     """Cria perfil transversal (corte) em uma posicao Y fixa."""
     pontos = superficie.pontos_grade_xy
@@ -312,53 +315,46 @@ def criar_perfil_transversal(
     if posicao_y is None:
         posicao_y = np.median(pontos[:, 1])
 
-    # Encontra pontos mais proximos da posicao Y
     tolerancia = grade.espacamento * 0.6
     mascara = np.abs(pontos[:, 1] - posicao_y) < tolerancia
     if mascara.sum() < 2:
-        # Aumenta tolerancia
         tolerancia = grade.espacamento * 1.5
         mascara = np.abs(pontos[:, 1] - posicao_y) < tolerancia
 
     xs = pontos[mascara, 0]
     zs = elevacoes[mascara]
 
-    # Ordena por X
     ordem = np.argsort(xs)
     xs = xs[ordem]
     zs = zs[ordem]
 
     fig = go.Figure()
 
-    # Terreno natural
     fig.add_trace(go.Scatter(
         x=xs, y=zs,
         mode="lines",
-        name="Terreno Natural",
-        line=dict(color="#8B4513", width=2),
+        name="terreno natural",
+        line=dict(color="#78716c", width=2),
         fill="tozeroy",
-        fillcolor="rgba(139,69,19,0.1)",
+        fillcolor="rgba(120,113,108,0.06)",
     ))
 
-    # Terreno ajustado (sem vegetal)
     zs_ajustado = zs - remocao_vegetal
     fig.add_trace(go.Scatter(
         x=xs, y=zs_ajustado,
         mode="lines",
-        name=f"Terreno (-{remocao_vegetal}m vegetal)",
-        line=dict(color="#A0522D", width=1, dash="dash"),
+        name="terreno (-{:.1f}m)".format(remocao_vegetal),
+        line=dict(color="#a8a29e", width=1, dash="dash"),
     ))
 
-    # Linha do projeto
     fig.add_trace(go.Scatter(
         x=[xs[0], xs[-1]],
         y=[cota_projeto, cota_projeto],
         mode="lines",
-        name=f"Projeto ({cota_projeto:.2f}m)",
-        line=dict(color="#1E88E5", width=3),
+        name="projeto ({:.2f}m)".format(cota_projeto),
+        line=dict(color=CORES["accent"], width=2),
     ))
 
-    # Zonas de corte e aterro com preenchimento
     delta = cota_projeto - zs_ajustado
     corte_y = np.where(delta < 0, zs_ajustado, cota_projeto)
     aterro_y = np.where(delta > 0, zs_ajustado, cota_projeto)
@@ -366,35 +362,27 @@ def criar_perfil_transversal(
     fig.add_trace(go.Scatter(
         x=xs, y=corte_y,
         fill="tonexty",
-        fillcolor="rgba(198,40,40,0.3)",
+        fillcolor="rgba(225,29,72,0.15)",
         line=dict(width=0),
-        name="Corte",
-        showlegend=True,
+        name="corte",
     ))
 
     fig.add_trace(go.Scatter(
         x=xs, y=aterro_y,
         fill="tonexty",
-        fillcolor="rgba(30,136,229,0.3)",
+        fillcolor="rgba(99,102,241,0.15)",
         line=dict(width=0),
-        name="Aterro",
-        showlegend=True,
+        name="aterro",
     ))
 
-    fig.update_layout(
-        title=f"{titulo} (Y = {posicao_y:.1f}m)",
-        xaxis_title="Easting (m)",
-        yaxis_title="Eleva\u00e7\u00e3o (m)",
-        template="plotly_white",
-        height=500,
-        legend=dict(x=0.01, y=0.99),
-    )
+    _aplicar_layout(fig, "{} (Y = {:.1f}m)".format(titulo, posicao_y), height=440,
+                    legend=dict(x=0.01, y=0.99))
     return fig
 
 
 def criar_diagrama_bruckner(
     resultado: ResultadoBruckner,
-    titulo: str = "Diagrama de Br\u00fcckner",
+    titulo: str = "diagrama de bruckner",
 ) -> go.Figure:
     """Cria diagrama de Bruckner (curva de massa)."""
     fig = go.Figure()
@@ -402,145 +390,136 @@ def criar_diagrama_bruckner(
     pos = resultado.posicoes
     vol = resultado.volumes_acumulados
 
-    # Curva de massa
     fig.add_trace(go.Scatter(
         x=pos, y=vol,
         mode="lines",
-        name="Volume Acumulado",
-        line=dict(color="#1565C0", width=3),
+        name="volume acumulado",
+        line=dict(color=CORES["accent"], width=2),
     ))
 
-    # Preenchimento: positivo (bota-fora) e negativo (emprestimo)
     vol_pos = np.where(vol > 0, vol, 0)
     vol_neg = np.where(vol < 0, vol, 0)
 
     fig.add_trace(go.Scatter(
         x=pos, y=vol_pos,
         fill="tozeroy",
-        fillcolor="rgba(198,40,40,0.2)",
+        fillcolor="rgba(225,29,72,0.1)",
         line=dict(width=0),
-        name="Bota-fora",
+        name="bota-fora",
     ))
 
     fig.add_trace(go.Scatter(
         x=pos, y=vol_neg,
         fill="tozeroy",
-        fillcolor="rgba(30,136,229,0.2)",
+        fillcolor="rgba(99,102,241,0.1)",
         line=dict(width=0),
-        name="Empr\u00e9stimo",
+        name="emprestimo",
     ))
 
-    # Linha zero
-    fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1)
+    fig.add_hline(y=0, line_dash="dash", line_color="#d4d4d8", line_width=1)
 
-    # Pontos de equilibrio
     for eq in resultado.pontos_equilibrio:
         fig.add_vline(
-            x=eq, line_dash="dot", line_color="green", line_width=1,
-            annotation_text=f"Eq: {eq:.1f}m",
+            x=eq, line_dash="dot", line_color=CORES["success"], line_width=1,
+            annotation_text="{:.1f}m".format(eq),
+            annotation_font=dict(size=9, color=CORES["success"]),
         )
 
-    fig.update_layout(
-        title=titulo,
-        xaxis_title="Posi\u00e7\u00e3o (m)",
-        yaxis_title="Volume Acumulado (m\u00b3)",
-        template="plotly_white",
-        height=500,
-    )
+    _aplicar_layout(fig, titulo, height=440)
     return fig
 
 
 def criar_tabela_volumes(
     resultados: List[ResultadoVolume],
-    titulo: str = "Resumo de Volumes",
+    titulo: str = "resumo de volumes",
 ) -> go.Figure:
     """Cria tabela formatada com volumes de corte e aterro."""
     headers = [
-        "Pol\u00edgono", "\u00c1rea (m\u00b2)", "Corte Bruto (m\u00b3)",
-        "Aterro Bruto (m\u00b3)", "Corte Empolado (m\u00b3)",
-        "Aterro Compactado (m\u00b3)", "Bota-fora (m\u00b3)",
-        "Solo Import. (m\u00b3)", "Balan\u00e7o (m\u00b3)",
+        "poligono", "area (m\u00b2)", "corte bruto (m\u00b3)",
+        "aterro bruto (m\u00b3)", "corte empolado (m\u00b3)",
+        "aterro compact. (m\u00b3)", "bota-fora (m\u00b3)",
+        "solo import. (m\u00b3)", "balanco (m\u00b3)",
     ]
 
     valores = [[] for _ in headers]
     for r in resultados:
         valores[0].append(r.nome_poligono)
-        valores[1].append(f"{r.area_total:,.1f}")
-        valores[2].append(f"{r.volume_corte_bruto:,.2f}")
-        valores[3].append(f"{r.volume_aterro_bruto:,.2f}")
-        valores[4].append(f"{r.volume_corte_empolado:,.2f}")
-        valores[5].append(f"{r.volume_aterro_compactado:,.2f}")
-        valores[6].append(f"{r.volume_bota_fora:,.2f}")
-        valores[7].append(f"{r.volume_solo_importado:,.2f}")
-        valores[8].append(f"{r.balanco_massa:,.2f}")
+        valores[1].append("{:,.1f}".format(r.area_total))
+        valores[2].append("{:,.2f}".format(r.volume_corte_bruto))
+        valores[3].append("{:,.2f}".format(r.volume_aterro_bruto))
+        valores[4].append("{:,.2f}".format(r.volume_corte_empolado))
+        valores[5].append("{:,.2f}".format(r.volume_aterro_compactado))
+        valores[6].append("{:,.2f}".format(r.volume_bota_fora))
+        valores[7].append("{:,.2f}".format(r.volume_solo_importado))
+        valores[8].append("{:,.2f}".format(r.balanco_massa))
 
     fig = go.Figure(data=[go.Table(
         header=dict(
             values=headers,
-            fill_color="#1565C0",
-            font=dict(color="white", size=12),
+            fill_color="#27272a",
+            font=dict(color="#fafafa", size=10, family="Inter, sans-serif"),
             align="center",
+            height=32,
         ),
         cells=dict(
             values=valores,
-            fill_color=[["#F5F5F5", "white"] * ((len(resultados) + 1) // 2)] * len(headers),
+            fill_color=[["#fafafa", "#ffffff"] * ((len(resultados) + 1) // 2)] * len(headers),
             align="center",
-            font=dict(size=11),
+            font=dict(size=10, color="#3f3f46", family="Inter, sans-serif"),
+            height=28,
         ),
     )])
 
-    fig.update_layout(title=titulo, height=max(300, 100 + 40 * len(resultados)))
+    fig.update_layout(
+        title=dict(text=titulo, font=dict(size=14, color="#27272a"), x=0, xanchor="left"),
+        height=max(260, 80 + 36 * len(resultados)),
+        margin=dict(l=0, r=0, t=40, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
     return fig
 
 
 def criar_grafico_barras_volumes(
     resultados: List[ResultadoVolume],
-    titulo: str = "Volumes por Pol\u00edgono",
+    titulo: str = "volumes por poligono",
 ) -> go.Figure:
     """Cria grafico de barras agrupadas com volumes por poligono."""
     nomes = [r.nome_poligono for r in resultados]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name="Corte Empolado",
+        name="corte empolado",
         x=nomes,
         y=[r.volume_corte_empolado for r in resultados],
-        marker_color="#C62828",
+        marker_color=CORES["corte"],
     ))
     fig.add_trace(go.Bar(
-        name="Aterro Compactado",
+        name="aterro compactado",
         x=nomes,
         y=[r.volume_aterro_compactado for r in resultados],
-        marker_color="#1565C0",
+        marker_color=CORES["aterro"],
     ))
     fig.add_trace(go.Bar(
-        name="Bota-fora",
+        name="bota-fora",
         x=nomes,
         y=[r.volume_bota_fora for r in resultados],
-        marker_color="#EF6C00",
+        marker_color=CORES["bota_fora"],
     ))
     fig.add_trace(go.Bar(
-        name="Solo Importado",
+        name="solo importado",
         x=nomes,
         y=[r.volume_solo_importado for r in resultados],
-        marker_color="#2E7D32",
+        marker_color=CORES["solo_imp"],
     ))
 
-    fig.update_layout(
-        title=titulo,
-        barmode="group",
-        xaxis_title="Pol\u00edgono",
-        yaxis_title="Volume (m\u00b3)",
-        template="plotly_white",
-        height=500,
-    )
+    _aplicar_layout(fig, titulo, height=440, barmode="group")
     return fig
 
 
 def criar_perfil_faixa(
     perfil: dict,
     faixa: dict,
-    titulo: str = "Perfil da Faixa",
+    titulo: str = "perfil da faixa",
 ) -> go.Figure:
     """Cria grafico de perfil (corte transversal) de uma faixa selecionada."""
     pos = perfil["posicoes"]
@@ -550,36 +529,32 @@ def criar_perfil_faixa(
     delta = perfil["delta"]
 
     direcao = faixa.get("direcao", "norte_sul")
-    eixo_label = "Easting (m)" if direcao == "norte_sul" else "Northing (m)"
+    eixo_label = "easting (m)" if direcao == "norte_sul" else "northing (m)"
 
     fig = go.Figure()
 
-    # Terreno natural
     fig.add_trace(go.Scatter(
         x=pos, y=terreno,
         mode="lines",
-        name="Terreno Natural",
-        line=dict(color="#8B4513", width=2),
+        name="terreno natural",
+        line=dict(color="#78716c", width=2),
     ))
 
-    # Terreno ajustado
     fig.add_trace(go.Scatter(
         x=pos, y=terreno_aj,
         mode="lines",
-        name="Terreno Ajustado",
-        line=dict(color="#A0522D", width=1, dash="dash"),
+        name="terreno ajustado",
+        line=dict(color="#a8a29e", width=1, dash="dash"),
     ))
 
-    # Projeto
     cota = float(projeto[0]) if len(projeto) > 0 else 0
     fig.add_trace(go.Scatter(
         x=pos, y=projeto,
         mode="lines",
-        name="Projeto ({:.2f}m)".format(cota),
-        line=dict(color="#1E88E5", width=3),
+        name="projeto ({:.2f}m)".format(cota),
+        line=dict(color=CORES["accent"], width=2),
     ))
 
-    # Preenchimento corte (terreno acima do projeto)
     corte_y = np.where(delta < 0, terreno_aj, projeto)
     fig.add_trace(go.Scatter(
         x=pos, y=corte_y,
@@ -590,12 +565,11 @@ def criar_perfil_faixa(
     fig.add_trace(go.Scatter(
         x=pos, y=projeto,
         fill="tonexty",
-        fillcolor="rgba(198,40,40,0.3)",
+        fillcolor="rgba(225,29,72,0.12)",
         line=dict(width=0),
-        name="Corte",
+        name="corte",
     ))
 
-    # Preenchimento aterro (terreno abaixo do projeto)
     aterro_y = np.where(delta > 0, terreno_aj, projeto)
     fig.add_trace(go.Scatter(
         x=pos, y=projeto,
@@ -606,17 +580,13 @@ def criar_perfil_faixa(
     fig.add_trace(go.Scatter(
         x=pos, y=aterro_y,
         fill="tonexty",
-        fillcolor="rgba(30,136,229,0.3)",
+        fillcolor="rgba(99,102,241,0.12)",
         line=dict(width=0),
-        name="Aterro",
+        name="aterro",
     ))
 
-    fig.update_layout(
-        title=titulo,
-        xaxis_title=eixo_label,
-        yaxis_title="Eleva\u00e7\u00e3o (m)",
-        template="plotly_white",
-        height=450,
-        legend=dict(x=0.01, y=0.99),
-    )
+    _aplicar_layout(fig, titulo, height=400,
+                    xaxis_title=eixo_label,
+                    yaxis_title="elev. (m)",
+                    legend=dict(x=0.01, y=0.99))
     return fig

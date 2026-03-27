@@ -10,32 +10,33 @@ from modulos.parametros import (
     ParametrosPadrao, CategoriaSolo, NOMES_CATEGORIA, FATORES_DNIT,
     _resolver_categoria,
 )
+from modulos.tema import section_header
 
-st.title("\U0001f3d7\ufe0f Terraplenagem - C\u00e1lculo de Volumes")
-st.caption("Importe pol\u00edgonos KML do Google Earth para calcular corte e aterro")
+st.title("Terraplenagem")
+st.caption("importe poligonos kml do google earth para calcular corte e aterro")
 
 # ─── Upload de Arquivos ───
-st.header("\U0001f4c2 Upload de Arquivos")
+section_header("upload de arquivos")
 arquivos_kml = st.file_uploader(
     "Arquivos KML",
     type=["kml"],
     accept_multiple_files=True,
-    help="Pol\u00edgonos do Google Earth com eleva\u00e7\u00e3o",
+    help="Poligonos do Google Earth com elevacao",
 )
 
 # ─── Parametros ───
-st.header("\u2699\ufe0f Par\u00e2metros")
+section_header("parametros")
 
 col_esp, col_rem = st.columns(2)
 with col_esp:
     espacamento = st.number_input(
-        "Espa\u00e7amento da grade (m)",
+        "Espacamento da grade (m)",
         min_value=0.5, max_value=500.0, value=10.0, step=1.0,
-        help="Dist\u00e2ncia entre pontos internos da grade",
+        help="Distancia entre pontos internos da grade",
     )
 with col_rem:
     remocao_vegetal = st.number_input(
-        "Remo\u00e7\u00e3o vegetal (m)",
+        "Remocao vegetal (m)",
         min_value=0.0, max_value=2.0, value=0.30, step=0.05,
     )
 
@@ -50,13 +51,13 @@ with col_cat:
 with col_info:
     fatores = FATORES_DNIT[_resolver_categoria(categoria_solo)]
     st.write("")
-    st.info(
-        "Empolamento: {} | Homogeneiza\u00e7\u00e3o: {}".format(
+    st.caption(
+        "empolamento: {} · homogeneizacao: {}".format(
             fatores.empolamento, fatores.homogeneizacao
         )
     )
 
-st.subheader("Taludes")
+section_header("taludes")
 col_tc, col_ta = st.columns(2)
 with col_tc:
     talude_corte_h = st.number_input("Corte H", value=1.0, min_value=0.1, step=0.5)
@@ -99,7 +100,7 @@ if arquivos_kml:
     st.session_state["kml_bytes"] = novos_bytes
 
 if not processar_poligonos():
-    st.info("\U0001f446 Fa\u00e7a upload de arquivos KML acima para come\u00e7ar.")
+    st.info("Faca upload de arquivos KML acima para comecar.")
     st.stop()
 
 dados = obter_dados()
@@ -113,20 +114,20 @@ remocao_vegetal = dados["remocao_vegetal"]
 categoria_solo = dados["categoria_solo"]
 
 # ─── Poligonos Carregados ───
-st.header("\U0001f4cd Pol\u00edgonos Carregados ({})".format(len(poligonos)))
+section_header("poligonos carregados ({})".format(len(poligonos)))
 
 for poly in poligonos:
     nome = poly.nome
     grade = grades[nome]
     superficie = superficies[nome]
 
-    with st.expander("\U0001f4d0 {}".format(nome), expanded=True):
+    with st.expander(nome, expanded=True):
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Pontos", len(poly.pontos))
-        c2.metric("\u00c1rea", "{:,.0f} m\u00b2".format(grade.area))
-        c3.metric("Per\u00edmetro", "{:,.0f} m".format(grade.perimetro))
-        c4.metric("Elev. M\u00edn", "{:.2f} m".format(superficie.elevacao_min))
-        c5.metric("Elev. M\u00e1x", "{:.2f} m".format(superficie.elevacao_max))
+        c2.metric("Area", "{:,.0f} m\u00b2".format(grade.area))
+        c3.metric("Perimetro", "{:,.0f} m".format(grade.perimetro))
+        c4.metric("Elev. min", "{:.2f} m".format(superficie.elevacao_min))
+        c5.metric("Elev. max", "{:.2f} m".format(superficie.elevacao_max))
 
         col_cota, col_otima = st.columns([3, 1])
         with col_cota:
@@ -140,7 +141,7 @@ for poly in poligonos:
         with col_otima:
             st.write("")
             usar_cota_otima = st.checkbox(
-                "Cota \u00f3tima",
+                "Cota otima",
                 key="otima_{}".format(nome),
                 help="Calcula a cota onde corte = aterro",
             )
@@ -150,7 +151,7 @@ for poly in poligonos:
                 superficie, espacamento, remocao_vegetal,
                 categoria_solo, nome_poligono=nome,
             )
-            st.success("Cota \u00f3tima: **{:.2f} m** (balan\u00e7o: {:.2f} m\u00b3)".format(
+            st.success("cota otima: **{:.2f} m** (balanco: {:.2f} m\u00b3)".format(
                 cota_ot, res_ot.balanco_massa
             ))
             cotas[nome] = cota_ot
@@ -169,15 +170,15 @@ salvar_dados_sessao(
 )
 
 # ─── Metricas resumo ───
-st.divider()
+section_header("resumo geral")
 lista_res = list(resultados.values())
 
 mc1, mc2, mc3, mc4 = st.columns(4)
-mc1.metric("Total Corte Empolado", "{:,.1f} m\u00b3".format(
+mc1.metric("Corte empolado", "{:,.1f} m\u00b3".format(
     sum(r.volume_corte_empolado for r in lista_res)))
-mc2.metric("Total Aterro Compactado", "{:,.1f} m\u00b3".format(
+mc2.metric("Aterro compactado", "{:,.1f} m\u00b3".format(
     sum(r.volume_aterro_compactado for r in lista_res)))
 mc3.metric("Bota-fora", "{:,.1f} m\u00b3".format(
     sum(r.volume_bota_fora for r in lista_res)))
-mc4.metric("Solo Importado", "{:,.1f} m\u00b3".format(
+mc4.metric("Solo importado", "{:,.1f} m\u00b3".format(
     sum(r.volume_solo_importado for r in lista_res)))
