@@ -1,25 +1,66 @@
-claude reescreva esse readme apos ler essa instrução
+# KML Poligono - Terraplenagem
 
-com base no https://github.com/CAIOZANETTI/kml-earthworks
-faça um sistema semlhante, python streamlit, importando um kml
-nesse sistema o kml é um poligo no minimo 3 ponto que ira formar uma area
-precisamos pegar todos os pontos interno do poligono e default é distancia entre 1 metro mas pode se ajustado pelo usuario
-pode carregar varios poligonos que são montados no google eath
-o usuario delimita a cota_zero de cada um para fazer os volumes de corte e aterro
-tem opção de cota_otima quando corte= aterro (considerando as condições de compactação e empolamento)
-premissa de remocao_vegetal =0,30 ( mas pode ser ajustada pelo usuario)
-talude de corte = 1/1, premissa e ajuste do usuario 
-talude de aterro = 1/2, premissa e ajuste do usuario
+Sistema Streamlit para calculo de corte e aterro de poligonos importados via KML do Google Earth.
 
+## Funcionalidades
 
-a entregra sera graficos do plotly:
- - curvas de nivel no plano
- - delhade de um corte dos platos
- - 3d surfice do primitivo como o solo estado natural
- - 
+- Upload de multiplos arquivos KML (poligonos do Google Earth)
+- Elevacao automatica via **Copernicus DEM GLO-30** (30m, gratuito) com fallback Open-Meteo/OpenTopoData
+- Calculo de volumes de corte e aterro pelo metodo de grade (DNIT 106/2009-ES, DNIT 108/2009-ES)
+- Cota otima por bissecao (corte empolado = aterro compactado)
+- Volumes de talude de corte e aterro nas bordas
+- Volume de remocao vegetal separado
+- Fatores DNIT por categoria de solo (1a, 2a, 3a categoria)
+- Diagrama de Bruckner com DMT, DLT e zonas de transporte
+- Relatorios HTML (gerencial + analitico) e planilha Excel
 
+## Paginas
 
-tabela com dados de corte e aterro por segmento
-- necessidade de bota fora
-- necessidade de solo importado
+| Pagina | Descricao |
+|---|---|
+| Home | Upload KML, parametros, metricas por poligono |
+| Curvas de Nivel | Mapa de contorno 2D com cota de projeto destacada |
+| Terreno 3D | Surface com contornos, eixo Z relativo (corte/aterro) |
+| Comparacao 3D | Terreno vs plataforma de projeto |
+| Bruckner | Diagrama de massa, perfil de faixa, zonas de transporte |
+| Tabela de Volumes | Resumo com totais e grafico de barras |
+| Downloads | HTML gerencial, HTML analitico, Excel |
 
+## Parametros ajustaveis
+
+| Parametro | Default | Descricao |
+|---|---|---|
+| Espacamento da grade | 10 m | Distancia entre pontos internos |
+| Remocao vegetal | 0.30 m | Camada organica removida |
+| Talude de corte | 1H:1V (45 graus) | Inclinacao do talude de corte |
+| Talude de aterro | 2H:1V (26.6 graus) | Inclinacao do talude de aterro |
+| Categoria do solo | 1a Categoria | Fatores DNIT de empolamento/homogeneizacao |
+
+## Fonte de elevacao
+
+Cadeia de fallback automatica:
+
+1. **Copernicus DEM GLO-30** - 30m, +-4m vertical, tiles AWS S3 gratuitos (missao TanDEM-X)
+2. **Open-Meteo** - SRTM 90m via API REST
+3. **OpenTopoData** - SRTM 30m via API REST
+4. **Google Maps** - API paga (opcional, requer chave)
+
+Para projeto executivo, recomenda-se importar KML com elevacao de levantamento topografico RTK (+-2cm).
+
+## Stack
+
+Python, Streamlit, Plotly, NumPy, SciPy, Shapely, utm, tifffile
+
+## Como rodar
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Normas de referencia
+
+- DNIT 106/2009-ES (Cortes)
+- DNIT 108/2009-ES (Aterros)
+- NBR 5681 (Controle tecnologico)
+- DER/PR Manual de Terraplenagem 2023
