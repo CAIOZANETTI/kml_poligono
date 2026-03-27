@@ -40,20 +40,79 @@ def criar_mapa_contorno(
     return fig
 
 
+def _preparar_z_3d(
+    elevacao_malha: np.ndarray,
+    exagero_vertical: int = 1,
+    cota_referencia: Optional[float] = None,
+) -> tuple:
+    """Prepara dados Z para visualizacao 3D.
+
+    Args:
+        elevacao_malha: 2D array de elevacoes.
+        exagero_vertical: Multiplicador do eixo Z (1-5).
+        cota_referencia: Se fornecido, converte para alturas relativas (corte/aterro).
+
+    Returns:
+        (z_data, z_label, colorscale, colorbar_dict)
+    """
+    if cota_referencia is not None:
+        z_data = elevacao_malha - cota_referencia
+        z_label = "Altura (m) [- corte / + aterro]"
+        # Escala divergente: vermelho=corte(negativo), azul=aterro(positivo)
+        colorscale = "RdBu"
+        vmax = float(np.nanmax(np.abs(z_data)))
+        colorbar = dict(title="Altura (m)<br>- Corte / + Aterro")
+        if exagero_vertical > 1:
+            z_data = z_data * exagero_vertical
+            z_label += " ({}x)".format(exagero_vertical)
+        return z_data, z_label, colorscale, colorbar
+    else:
+        z_data = elevacao_malha
+        z_label = "Eleva\u00e7\u00e3o (m)"
+        if exagero_vertical > 1:
+            z_media = float(np.nanmean(z_data))
+            z_data = (z_data - z_media) * exagero_vertical + z_media
+            z_label += " (exagero {}x)".format(exagero_vertical)
+        return z_data, z_label, None, dict(title="Eleva\u00e7\u00e3o (m)")
+
+
+def _preparar_z_borda(
+    borda_z: np.ndarray,
+    exagero_vertical: int = 1,
+    cota_referencia: Optional[float] = None,
+    z_media: Optional[float] = None,
+) -> np.ndarray:
+    """Aplica mesma transformacao Z nos pontos de borda."""
+    if cota_referencia is not None:
+        borda_z_out = borda_z - cota_referencia
+        if exagero_vertical > 1:
+            borda_z_out = borda_z_out * exagero_vertical
+        return borda_z_out
+    elif exagero_vertical > 1 and z_media is not None:
+        return (borda_z - z_media) * exagero_vertical + z_media
+    return borda_z
+
+
 def criar_superficie_3d(
     superficie: SuperficieTerreno,
     grade: Optional[GradePoligono] = None,
     titulo: str = "Terreno Natural 3D",
+    exagero_vertical: int = 1,
+    cota_referencia: Optional[float] = None,
 ) -> go.Figure:
     """Cria visualizacao 3D do terreno natural usando go.Surface."""
     fig = go.Figure()
 
+    z_data, z_label, colorscale, colorbar = _preparar_z_3d(
+        superficie.elevacao_malha, exagero_vertical, cota_referencia,
+    )
+
     fig.add_trace(go.Surface(
         x=superficie.malha_x,
         y=superficie.malha_y,
-        z=superficie.elevacao_malha,
-        colorscale="Earth",
-        colorbar=dict(title="Eleva\u00e7\u00e3o (m)"),
+        z=z_data,
+        colorscale=colorscale or "Earth",
+        colorbar=colorbar,
         name="Terreno Natural",
         connectgaps=True,
     ))
@@ -62,10 +121,14 @@ def criar_superficie_3d(
     if grade is not None:
         borda = grade.pontos_borda
         borda_fechada = np.vstack([borda, borda[0:1]])
+        z_media = float(np.nanmean(superficie.elevacao_malha))
+        borda_z = _preparar_z_borda(
+            borda_fechada[:, 2], exagero_vertical, cota_referencia, z_media,
+        )
         fig.add_trace(go.Scatter3d(
             x=borda_fechada[:, 0],
             y=borda_fechada[:, 1],
-            z=borda_fechada[:, 2],
+            z=borda_z,
             mode="lines+markers",
             line=dict(color="red", width=4),
             marker=dict(size=3, color="red"),
@@ -77,7 +140,7 @@ def criar_superficie_3d(
         scene=dict(
             xaxis_title="Easting (m)",
             yaxis_title="Northing (m)",
-            zaxis_title="Eleva\u00e7\u00e3o (m)",
+            zaxis_title=z_label,
             aspectmode="data",
         ),
         template="plotly_white",
@@ -90,16 +153,22 @@ def criar_superficie_3d_contornos(
     superficie: SuperficieTerreno,
     grade: Optional[GradePoligono] = None,
     titulo: str = "Terreno Natural 3D (Contornos)",
+    exagero_vertical: int = 1,
+    cota_referencia: Optional[float] = None,
 ) -> go.Figure:
     """Cria Surface 3D com contornos projetados no plano Z (estilo topografico)."""
     fig = go.Figure()
 
+    z_data, z_label, colorscale, colorbar = _preparar_z_3d(
+        superficie.elevacao_malha, exagero_vertical, cota_referencia,
+    )
+
     fig.add_trace(go.Surface(
         x=superficie.malha_x,
         y=superficie.malha_y,
-        z=superficie.elevacao_malha,
-        colorscale="Viridis",
-        colorbar=dict(title="Elev. (m)"),
+        z=z_data,
+        colorscale=colorscale or "Viridis",
+        colorbar=colorbar if colorscale else dict(title="Elev. (m)"),
         name="Terreno Natural",
         connectgaps=True,
         contours_z=dict(
@@ -113,10 +182,14 @@ def criar_superficie_3d_contornos(
     if grade is not None:
         borda = grade.pontos_borda
         borda_fechada = np.vstack([borda, borda[0:1]])
+        z_media = float(np.nanmean(superficie.elevacao_malha))
+        borda_z = _preparar_z_borda(
+            borda_fechada[:, 2], exagero_vertical, cota_referencia, z_media,
+        )
         fig.add_trace(go.Scatter3d(
             x=borda_fechada[:, 0],
             y=borda_fechada[:, 1],
-            z=borda_fechada[:, 2],
+            z=borda_z,
             mode="lines+markers",
             line=dict(color="red", width=4),
             marker=dict(size=3, color="red"),
@@ -128,7 +201,7 @@ def criar_superficie_3d_contornos(
         scene=dict(
             xaxis_title="Easting (m)",
             yaxis_title="Northing (m)",
-            zaxis_title="Elev. (m)",
+            zaxis_title=z_label,
             aspectmode="data",
             camera=dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
         ),
