@@ -1,13 +1,15 @@
 """Coleta de elevacao via APIs externas.
 
-Cadeia de fallback: Open-Meteo -> OpenTopoData -> Google Maps Elevation.
+Cadeia de fallback: Copernicus DEM GLO-30 -> Open-Meteo -> OpenTopoData -> Google Maps.
 Baseado no padrao do repositorio kml-earthworks.
 """
 
+import io
 import time
 import math
 from typing import List, Optional, Tuple
 
+import numpy as np
 import requests
 
 from modulos.leitor_kml import PontoKML, PoligonoKML
@@ -16,6 +18,122 @@ from modulos.leitor_kml import PontoKML, PoligonoKML
 _TAMANHO_LOTE = 100  # pontos por requisicao
 _TIMEOUT_CONEXAO = 3
 _TIMEOUT_LEITURA = 10
+
+# Cache de tiles Copernicus (chave = (lat_floor, lon_floor))
+_cache_tiles_copernicus = {}
+
+_COPERNICUS_URL = (
+    "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/"
+    "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM/"
+    "Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM.tif"
+)
+
+
+def _copernicus_tile_url(lat_floor: int, lon_floor: int) -> str:
+    """Monta URL do tile Copernicus DEM no AWS S3."""
+    ns = "N" if lat_floor >= 0 else "S"
+    ew = "E" if lon_floor >= 0 else "W"
+    return _COPERNICUS_URL.format(
+        ns=ns, lat=abs(lat_floor),
+        ew=ew, lon=abs(lon_floor),
+    )
+
+
+def _baixar_tile_copernicus(lat_floor: int, lon_floor: int) -> Optional[np.ndarray]:
+    """Baixa e parseia um tile 1x1 grau do Copernicus DEM GLO-30.
+
+    Usa tifffile para ler o GeoTIFF. Cacheia em memoria.
+
+    Returns:
+        Array 2D de elevacoes (float32) ou None se falhar.
+    """
+    chave = (lat_floor, lon_floor)
+    if chave in _cache_tiles_copernicus:
+        return _cache_tiles_copernicus[chave]
+
+    url = _copernicus_tile_url(lat_floor, lon_floor)
+
+    try:
+        import tifffile
+    except ImportError:
+        return None
+
+    try:
+        resp = requests.get(url, timeout=(5, 120))
+        if resp.status_code != 200:
+            _cache_tiles_copernicus[chave] = None
+            return None
+
+        with tifffile.TiffFile(io.BytesIO(resp.content)) as tif:
+            data = tif.pages[0].asarray()
+
+        _cache_tiles_copernicus[chave] = data
+        return data
+
+    except Exception:
+        _cache_tiles_copernicus[chave] = None
+        return None
+
+
+def _amostrar_elevacao_tile(
+    data: np.ndarray,
+    lat: float,
+    lon: float,
+    lat_floor: int,
+    lon_floor: int,
+) -> Optional[float]:
+    """Amostra elevacao de um pixel no tile Copernicus.
+
+    Cada tile cobre [lat_floor, lat_floor+1) x [lon_floor, lon_floor+1).
+    Origem do raster: canto NW (topo-esquerda).
+    Resolucao: 1 arcsegundo (~30m).
+    """
+    nrows, ncols = data.shape
+
+    # Fracao dentro do tile (0..1)
+    frac_lon = (lon - lon_floor)
+    frac_lat = (lat_floor + 1 - lat)  # invertido: row 0 = norte
+
+    col = int(frac_lon * ncols)
+    row = int(frac_lat * nrows)
+
+    # Clamp aos limites
+    col = max(0, min(col, ncols - 1))
+    row = max(0, min(row, nrows - 1))
+
+    valor = float(data[row, col])
+
+    # Nodata: Copernicus usa valores muito negativos
+    if valor <= -9999.0:
+        return None
+
+    return valor
+
+
+def obter_elevacao_copernicus(pontos: List[PontoKML]) -> List[Optional[float]]:
+    """Obtem elevacao via Copernicus DEM GLO-30 (30m, gratuito via AWS).
+
+    Baixa tiles 1x1 grau do bucket S3 publico copernicus-dem-30m.
+    Resolucao: ~30m (1 arcsegundo). Precisao vertical: +-4m.
+    Fonte: missao TanDEM-X (radar, 2010-2015).
+
+    Returns:
+        Lista de elevacoes (None onde nao foi possivel obter).
+    """
+    elevacoes: List[Optional[float]] = [None] * len(pontos)
+
+    for i, p in enumerate(pontos):
+        lat_floor = math.floor(p.latitude)
+        lon_floor = math.floor(p.longitude)
+
+        tile = _baixar_tile_copernicus(lat_floor, lon_floor)
+        if tile is None:
+            continue
+
+        elev = _amostrar_elevacao_tile(tile, p.latitude, p.longitude, lat_floor, lon_floor)
+        elevacoes[i] = elev
+
+    return elevacoes
 
 
 def obter_elevacao_open_meteo(pontos: List[PontoKML]) -> List[Optional[float]]:
@@ -156,7 +274,7 @@ def obter_elevacao(
 ) -> List[Optional[float]]:
     """Obtem elevacao com cadeia de fallback.
 
-    Ordem: Open-Meteo -> OpenTopoData -> Google Maps.
+    Ordem: Copernicus DEM GLO-30 -> Open-Meteo -> OpenTopoData -> Google Maps.
 
     Args:
         pontos: Lista de pontos para obter elevacao.
@@ -168,18 +286,39 @@ def obter_elevacao(
     """
     total = len(pontos)
 
-    # 1. Open-Meteo
+    # 1. Copernicus DEM GLO-30 (30m, gratuito, mais preciso)
     if callback_progresso:
-        callback_progresso("Obtendo elevacao via Open-Meteo...", 0.1)
-    elevacoes = obter_elevacao_open_meteo(pontos)
+        callback_progresso("Obtendo elevacao via Copernicus DEM GLO-30...", 0.05)
+    elevacoes = obter_elevacao_copernicus(pontos)
 
     ausentes = sum(1 for e in elevacoes if e is None)
     if ausentes == 0:
         return elevacoes
 
-    # 2. OpenTopoData para pontos ausentes
+    # 2. Open-Meteo para pontos ausentes
     if callback_progresso:
-        callback_progresso(f"Open-Meteo: {ausentes} pontos sem dados. Tentando OpenTopoData...", 0.4)
+        callback_progresso(
+            "Copernicus: {} pontos sem dados. Tentando Open-Meteo...".format(ausentes), 0.2,
+        )
+
+    pontos_ausentes = [p for p, e in zip(pontos, elevacoes) if e is None]
+    indices_ausentes = [i for i, e in enumerate(elevacoes) if e is None]
+
+    if pontos_ausentes:
+        elevacoes_om = obter_elevacao_open_meteo(pontos_ausentes)
+        for idx_local, idx_global in enumerate(indices_ausentes):
+            if elevacoes_om[idx_local] is not None:
+                elevacoes[idx_global] = elevacoes_om[idx_local]
+
+    ausentes = sum(1 for e in elevacoes if e is None)
+    if ausentes == 0:
+        return elevacoes
+
+    # 3. OpenTopoData para pontos ausentes
+    if callback_progresso:
+        callback_progresso(
+            "Open-Meteo: {} pontos sem dados. Tentando OpenTopoData...".format(ausentes), 0.5,
+        )
 
     pontos_ausentes = [p for p, e in zip(pontos, elevacoes) if e is None]
     indices_ausentes = [i for i, e in enumerate(elevacoes) if e is None]
@@ -194,10 +333,12 @@ def obter_elevacao(
     if ausentes == 0:
         return elevacoes
 
-    # 3. Google Maps (se chave fornecida)
+    # 4. Google Maps (se chave fornecida)
     if api_key_google and ausentes > 0:
         if callback_progresso:
-            callback_progresso(f"OpenTopoData: {ausentes} pontos restantes. Tentando Google...", 0.7)
+            callback_progresso(
+                "OpenTopoData: {} pontos restantes. Tentando Google...".format(ausentes), 0.7,
+            )
 
         pontos_ausentes = [p for p, e in zip(pontos, elevacoes) if e is None]
         indices_ausentes = [i for i, e in enumerate(elevacoes) if e is None]
