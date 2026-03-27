@@ -4,52 +4,12 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from scipy.spatial import Delaunay
 from typing import List, Optional
 
 from modulos.terreno import SuperficieTerreno, gerar_superficie_projeto
 from modulos.volumes import ResultadoVolume
 from modulos.bruckner import ResultadoBruckner
 from modulos.geometria import GradePoligono
-
-
-def _criar_mesh3d_terreno(
-    superficie: SuperficieTerreno,
-    colorscale: str = "Earth",
-    opacity: float = 1.0,
-    name: str = "Terreno",
-    showscale: bool = True,
-) -> go.Mesh3d:
-    """Cria Mesh3d com triangulacao Delaunay a partir dos pontos da grade.
-
-    Mesh3d renderiza superficies reais mesmo com pontos irregulares/NaN.
-    """
-    pontos = superficie.pontos_grade_xy
-    elevacoes = superficie.elevacao_grade
-
-    # Filtra NaN
-    mascara = ~np.isnan(elevacoes)
-    x = pontos[mascara, 0]
-    y = pontos[mascara, 1]
-    z = elevacoes[mascara]
-
-    # Triangulacao Delaunay 2D
-    tri = Delaunay(np.column_stack([x, y]))
-    i, j, k = tri.simplices[:, 0], tri.simplices[:, 1], tri.simplices[:, 2]
-
-    return go.Mesh3d(
-        x=x, y=y, z=z,
-        i=i, j=j, k=k,
-        intensity=z,
-        colorscale=colorscale,
-        opacity=opacity,
-        name=name,
-        showscale=showscale,
-        colorbar=dict(title="Eleva\u00e7\u00e3o (m)") if showscale else None,
-        flatshading=False,
-        lighting=dict(ambient=0.6, diffuse=0.8, roughness=0.5, specular=0.3),
-        lightposition=dict(x=100, y=200, z=300),
-    )
 
 
 def criar_mapa_contorno(
@@ -85,12 +45,17 @@ def criar_superficie_3d(
     grade: Optional[GradePoligono] = None,
     titulo: str = "Terreno Natural 3D",
 ) -> go.Figure:
-    """Cria visualizacao 3D do terreno natural usando Mesh3d (Delaunay)."""
+    """Cria visualizacao 3D do terreno natural usando go.Surface."""
     fig = go.Figure()
 
-    # Mesh3d com triangulacao - renderiza superficie real
-    fig.add_trace(_criar_mesh3d_terreno(
-        superficie, colorscale="Earth", name="Terreno Natural",
+    fig.add_trace(go.Surface(
+        x=superficie.malha_x,
+        y=superficie.malha_y,
+        z=superficie.elevacao_malha,
+        colorscale="Earth",
+        colorbar=dict(title="Eleva\u00e7\u00e3o (m)"),
+        name="Terreno Natural",
+        connectgaps=True,
     ))
 
     # Contorno da borda
@@ -130,31 +95,29 @@ def criar_comparacao_3d(
     """Cria visualizacao 3D comparando terreno com superficie de projeto."""
     fig = go.Figure()
 
-    # Terreno natural (Mesh3d)
-    fig.add_trace(_criar_mesh3d_terreno(
-        superficie, colorscale="Earth", opacity=0.85,
-        name="Terreno Natural", showscale=False,
+    # Terreno natural (Surface)
+    fig.add_trace(go.Surface(
+        x=superficie.malha_x,
+        y=superficie.malha_y,
+        z=superficie.elevacao_malha,
+        colorscale="Earth",
+        opacity=0.85,
+        name="Terreno Natural",
+        showscale=False,
+        connectgaps=True,
     ))
 
-    # Superficie de projeto (plano Mesh3d na cota)
-    pontos = superficie.pontos_grade_xy
-    elevacoes = superficie.elevacao_grade
-    mascara = ~np.isnan(elevacoes)
-    x_proj = pontos[mascara, 0]
-    y_proj = pontos[mascara, 1]
-    z_proj = np.full(x_proj.shape, cota_projeto)
-
-    tri = Delaunay(np.column_stack([x_proj, y_proj]))
-    i, j, k = tri.simplices[:, 0], tri.simplices[:, 1], tri.simplices[:, 2]
-
-    fig.add_trace(go.Mesh3d(
-        x=x_proj, y=y_proj, z=z_proj,
-        i=i, j=j, k=k,
-        color="rgba(30,136,229,0.35)",
+    # Superficie de projeto (plana na cota)
+    superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
+    fig.add_trace(go.Surface(
+        x=superficie.malha_x,
+        y=superficie.malha_y,
+        z=superficie_proj,
+        colorscale=[[0, "rgba(30,136,229,0.5)"], [1, "rgba(30,136,229,0.5)"]],
         opacity=0.5,
-        name="Projeto (cota {:.2f}m)".format(cota_projeto),
         showscale=False,
-        flatshading=True,
+        name="Projeto (cota {:.2f}m)".format(cota_projeto),
+        connectgaps=True,
     ))
 
     fig.update_layout(
