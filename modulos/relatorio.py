@@ -399,7 +399,6 @@ def gerar_relatorio_analitico(
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>{titulo}</title>
 <style>{_CSS_BASE}</style>
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
 <div class="header">
@@ -425,8 +424,13 @@ def gerar_relatorio_analitico(
 </div>"""
 
     # Graficos
+    primeiro_grafico = True
     for nome, fig in figuras.items():
-        fig_html = fig.to_html(full_html=False, include_plotlyjs=False)
+        fig_html = fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if primeiro_grafico else False,
+        )
+        primeiro_grafico = False
         html += f"""
 <div class="secao">
     <h2>{nome}</h2>
