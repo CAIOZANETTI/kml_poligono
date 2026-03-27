@@ -453,6 +453,24 @@ def criar_tabela_volumes(
         valores[7].append("{:,.2f}".format(r.volume_solo_importado))
         valores[8].append("{:,.2f}".format(r.balanco_massa))
 
+    # Linha de totais
+    valores[0].append("<b>TOTAL</b>")
+    valores[1].append("<b>{:,.1f}</b>".format(sum(r.area_total for r in resultados)))
+    valores[2].append("<b>{:,.2f}</b>".format(sum(r.volume_corte_bruto for r in resultados)))
+    valores[3].append("<b>{:,.2f}</b>".format(sum(r.volume_aterro_bruto for r in resultados)))
+    valores[4].append("<b>{:,.2f}</b>".format(sum(r.volume_corte_empolado for r in resultados)))
+    valores[5].append("<b>{:,.2f}</b>".format(sum(r.volume_aterro_compactado for r in resultados)))
+    valores[6].append("<b>{:,.2f}</b>".format(sum(r.volume_bota_fora for r in resultados)))
+    valores[7].append("<b>{:,.2f}</b>".format(sum(r.volume_solo_importado for r in resultados)))
+    valores[8].append("<b>{:,.2f}</b>".format(sum(r.balanco_massa for r in resultados)))
+
+    n_linhas = len(resultados) + 1
+    cores_linhas = [["#F5F5F5", "white"] * ((n_linhas + 1) // 2) for _ in headers]
+    # Destaca ultima linha (totais) com azul claro
+    for col in cores_linhas:
+        if len(col) >= n_linhas:
+            col[n_linhas - 1] = "#E3F2FD"
+
     fig = go.Figure(data=[go.Table(
         header=dict(
             values=headers,
@@ -462,13 +480,13 @@ def criar_tabela_volumes(
         ),
         cells=dict(
             values=valores,
-            fill_color=[["#F5F5F5", "white"] * ((len(resultados) + 1) // 2)] * len(headers),
+            fill_color=cores_linhas,
             align="center",
             font=dict(size=11),
         ),
     )])
 
-    fig.update_layout(title=titulo, height=max(300, 100 + 40 * len(resultados)))
+    fig.update_layout(title=titulo, height=max(300, 100 + 40 * n_linhas))
     return fig
 
 
