@@ -39,14 +39,17 @@ with col_faixas:
         key="num_faixas_brk",
     )
 
-dlt_input = st.number_input(
-    "DLT (m\u00b3)",
-    value=None,
-    step=100.0,
-    format="%.1f",
-    key="dlt_bruckner",
-    help="Dist\u00e2ncia Limite de Transporte econ\u00f4mico. Acima = bota-fora mais barato.",
-)
+usar_dlt = st.checkbox("Usar DLT", value=False, key="usar_dlt_brk")
+dlt_input = None
+if usar_dlt:
+    dlt_input = st.number_input(
+        "DLT (m\u00b3)",
+        value=0.0,
+        step=100.0,
+        format="%.1f",
+        key="dlt_bruckner",
+        help="Dist\u00e2ncia Limite de Transporte econ\u00f4mico. Acima = bota-fora mais barato.",
+    )
 
 faixas = calcular_volumes_por_faixas(
     superficie, cota, espacamento,
