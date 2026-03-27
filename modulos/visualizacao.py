@@ -86,6 +86,59 @@ def criar_superficie_3d(
     return fig
 
 
+def criar_superficie_3d_contornos(
+    superficie: SuperficieTerreno,
+    grade: Optional[GradePoligono] = None,
+    titulo: str = "Terreno Natural 3D (Contornos)",
+) -> go.Figure:
+    """Cria Surface 3D com contornos projetados no plano Z (estilo topografico)."""
+    fig = go.Figure()
+
+    fig.add_trace(go.Surface(
+        x=superficie.malha_x,
+        y=superficie.malha_y,
+        z=superficie.elevacao_malha,
+        colorscale="Viridis",
+        colorbar=dict(title="Elev. (m)"),
+        name="Terreno Natural",
+        connectgaps=True,
+        contours_z=dict(
+            show=True,
+            usecolormap=True,
+            highlightcolor="limegreen",
+            project_z=True,
+        ),
+    ))
+
+    if grade is not None:
+        borda = grade.pontos_borda
+        borda_fechada = np.vstack([borda, borda[0:1]])
+        fig.add_trace(go.Scatter3d(
+            x=borda_fechada[:, 0],
+            y=borda_fechada[:, 1],
+            z=borda_fechada[:, 2],
+            mode="lines+markers",
+            line=dict(color="red", width=4),
+            marker=dict(size=3, color="red"),
+            name="Borda",
+        ))
+
+    fig.update_layout(
+        title=titulo,
+        scene=dict(
+            xaxis_title="Easting (m)",
+            yaxis_title="Northing (m)",
+            zaxis_title="Elev. (m)",
+            aspectmode="data",
+            camera=dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
+        ),
+        template="plotly_white",
+        height=700,
+        margin=dict(l=65, r=50, b=65, t=90),
+    )
+    return fig
+
+
 def criar_comparacao_3d(
     superficie: SuperficieTerreno,
     cota_projeto: float,
