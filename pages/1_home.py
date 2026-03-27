@@ -10,13 +10,12 @@ from modulos.parametros import (
     ParametrosPadrao, CategoriaSolo, NOMES_CATEGORIA, FATORES_DNIT,
     _resolver_categoria,
 )
-from modulos.tema import section_header
 
 st.title("Terraplenagem")
 st.caption("importe poligonos kml do google earth para calcular corte e aterro")
 
-# ─── Upload de Arquivos ───
-section_header("upload de arquivos")
+# ─── Upload ───
+st.subheader("Upload")
 arquivos_kml = st.file_uploader(
     "Arquivos KML",
     type=["kml"],
@@ -25,7 +24,7 @@ arquivos_kml = st.file_uploader(
 )
 
 # ─── Parametros ───
-section_header("parametros")
+st.subheader("Parametros")
 
 col_esp, col_rem = st.columns(2)
 with col_esp:
@@ -57,7 +56,7 @@ with col_info:
         )
     )
 
-section_header("taludes")
+st.subheader("Taludes")
 col_tc, col_ta = st.columns(2)
 with col_tc:
     talude_corte_h = st.number_input("Corte H", value=1.0, min_value=0.1, step=0.5)
@@ -84,14 +83,12 @@ st.session_state["parametros"] = parametros
 # ─── Processar arquivos ───
 st.divider()
 
-# Salva bytes no session_state ao receber novos arquivos
 if arquivos_kml:
     novos_bytes = []
     for arq in arquivos_kml:
         conteudo = arq.read()
         arq.seek(0)
         novos_bytes.append((conteudo, arq.name))
-    # Se mudou os arquivos, limpa dados antigos para reprocessar
     bytes_antigos = st.session_state.get("kml_bytes")
     nomes_novos = sorted([n for _, n in novos_bytes])
     nomes_antigos = sorted([n for _, n in bytes_antigos]) if bytes_antigos else []
@@ -114,7 +111,7 @@ remocao_vegetal = dados["remocao_vegetal"]
 categoria_solo = dados["categoria_solo"]
 
 # ─── Poligonos Carregados ───
-section_header("poligonos carregados ({})".format(len(poligonos)))
+st.subheader("Poligonos carregados ({})".format(len(poligonos)))
 
 for poly in poligonos:
     nome = poly.nome
@@ -163,14 +160,14 @@ for poly in poligonos:
                 remocao_vegetal, categoria_solo, nome,
             )
 
-# Atualiza session_state com cotas/resultados atualizados
 salvar_dados_sessao(
     poligonos, grades, superficies, resultados, cotas,
     parametros, espacamento, remocao_vegetal, categoria_solo,
 )
 
-# ─── Metricas resumo ───
-section_header("resumo geral")
+# ─── Resumo ───
+st.divider()
+st.subheader("Resumo")
 lista_res = list(resultados.values())
 
 mc1, mc2, mc3, mc4 = st.columns(4)

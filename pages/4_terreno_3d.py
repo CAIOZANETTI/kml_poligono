@@ -7,7 +7,7 @@ from modulos.visualizacao import criar_superficie_3d, criar_superficie_3d_contor
 pagina_requer_dados()
 dados = obter_dados()
 
-st.title("Terreno 3D")
+st.subheader("Terreno 3D")
 
 nome = seletor_poligono("3d")
 
@@ -36,14 +36,13 @@ exagero = st.select_slider(
     key="exagero_3d",
 )
 
-# Determinar cota de referencia para modo relativo
 cota_ref = dados["cotas"].get(nome) if "altura" in modo_z else None
 
 if "contornos" in estilo:
     fig = criar_superficie_3d_contornos(
         dados["superficies"][nome],
         dados["grades"][nome],
-        titulo="terreno 3d (contornos) — {}".format(nome),
+        titulo="Terreno 3D (contornos) - {}".format(nome),
         exagero_vertical=exagero,
         cota_referencia=cota_ref,
     )
@@ -51,7 +50,7 @@ else:
     fig = criar_superficie_3d(
         dados["superficies"][nome],
         dados["grades"][nome],
-        titulo="terreno 3d — {}".format(nome),
+        titulo="Terreno 3D - {}".format(nome),
         exagero_vertical=exagero,
         cota_referencia=cota_ref,
     )

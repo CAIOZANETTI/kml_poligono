@@ -12,12 +12,11 @@ from modulos.visualizacao import (
 from modulos.relatorio import gerar_relatorio_html
 from modulos.volumes import calcular_volumes_por_faixas
 from modulos.parametros import NOMES_CATEGORIA
-from modulos.tema import section_header
 
 pagina_requer_dados()
 dados = obter_dados()
 
-st.title("Downloads")
+st.subheader("Downloads")
 st.caption("exporte relatorios e planilhas")
 
 lista_res = list(dados["resultados"].values())
@@ -30,7 +29,6 @@ remocao_vegetal = dados["remocao_vegetal"]
 espacamento = dados["espacamento"]
 categoria = dados["categoria_solo"]
 
-# Coleta figuras para relatorio analitico
 figuras = {}
 for nome in nomes:
     figuras["Curvas de N\u00edvel - {}".format(nome)] = criar_mapa_contorno(
@@ -50,7 +48,7 @@ figuras["Volumes por Pol\u00edgono"] = criar_grafico_barras_volumes(lista_res)
 
 relatorios = gerar_relatorio_html(lista_res, figuras, parametros)
 
-section_header("relatorios")
+st.divider()
 
 st.download_button(
     label="Memorial gerencial (.html)",
@@ -68,7 +66,6 @@ st.download_button(
     use_container_width=True,
 )
 
-# Planilha Excel
 buffer_xlsx = io.BytesIO()
 with pd.ExcelWriter(buffer_xlsx, engine="openpyxl") as writer:
     df_resumo = pd.DataFrame([
