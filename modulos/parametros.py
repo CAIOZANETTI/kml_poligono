@@ -42,7 +42,7 @@ FATORES_DNIT: Dict[CategoriaSolo, FatoresSolo] = {
 @dataclass
 class ParametrosPadrao:
     """Parametros padrao ajustaveis pelo usuario."""
-    espacamento_grade: float = 1.0        # metros entre pontos da grade
+    espacamento_grade: float = 10.0       # metros entre pontos da grade
     remocao_vegetal: float = 0.30         # metros de camada vegetal
     talude_corte_h: float = 1.0           # componente horizontal (1:1)
     talude_corte_v: float = 1.0           # componente vertical
