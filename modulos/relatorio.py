@@ -446,6 +446,8 @@ def gerar_relatorio_analitico(
             <th>Corte Empolado (m\u00b3)</th><th>Aterro Compact. (m\u00b3)</th>
             <th>Bota-fora (m\u00b3)</th><th>Solo Import. (m\u00b3)</th>
             <th>Balan\u00e7o (m\u00b3)</th>
+            <th>Rem. Vegetal (m\u00b3)</th>
+            <th>Talude Corte (m\u00b3)</th><th>Talude Aterro (m\u00b3)</th>
         </tr></thead>
         <tbody>"""
 
@@ -465,6 +467,9 @@ def gerar_relatorio_analitico(
                 <td>{r.volume_bota_fora:,.2f}</td>
                 <td>{r.volume_solo_importado:,.2f}</td>
                 <td>{r.balanco_massa:,.2f}</td>
+                <td>{r.volume_remocao_vegetal:,.2f}</td>
+                <td>{r.volume_talude_corte:,.2f}</td>
+                <td>{r.volume_talude_aterro:,.2f}</td>
             </tr>"""
 
     # Totais
@@ -478,6 +483,9 @@ def gerar_relatorio_analitico(
     t_bf = sum(r.volume_bota_fora for r in resultados)
     t_si = sum(r.volume_solo_importado for r in resultados)
     t_bal = sum(r.balanco_massa for r in resultados)
+    t_rv = sum(r.volume_remocao_vegetal for r in resultados)
+    t_tc = sum(r.volume_talude_corte for r in resultados)
+    t_ta = sum(r.volume_talude_aterro for r in resultados)
 
     html += f"""
             <tr style="font-weight:700;background:#E3F2FD">
@@ -493,6 +501,9 @@ def gerar_relatorio_analitico(
                 <td>{t_bf:,.2f}</td>
                 <td>{t_si:,.2f}</td>
                 <td>{t_bal:,.2f}</td>
+                <td>{t_rv:,.2f}</td>
+                <td>{t_tc:,.2f}</td>
+                <td>{t_ta:,.2f}</td>
             </tr>
         </tbody>
     </table>

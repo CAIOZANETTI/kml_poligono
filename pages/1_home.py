@@ -1,5 +1,6 @@
 """Pagina inicial - Upload, parametros, configuracao de poligonos e metricas."""
 
+import math
 import streamlit as st
 from modulos.estado import (
     processar_poligonos, obter_dados, salvar_dados_sessao,
@@ -59,11 +60,19 @@ with col_info:
 st.subheader("Taludes")
 col_tc, col_ta = st.columns(2)
 with col_tc:
-    talude_corte_h = st.number_input("Corte H", value=1.0, min_value=0.1, step=0.5)
-    talude_corte_v = st.number_input("Corte V", value=1.0, min_value=0.1, step=0.5)
+    talude_corte_h = st.number_input("Talude corte \u2014 H (horizontal)", value=1.0, min_value=0.1, step=0.5)
+    talude_corte_v = st.number_input("Talude corte \u2014 V (vertical)", value=1.0, min_value=0.1, step=0.5)
+    ang_corte = math.degrees(math.atan(talude_corte_v / talude_corte_h))
+    st.caption("Inclina\u00e7\u00e3o: 1:{:.0f} (H:V) \u00b7 {:.1f}\u00b0 com a horizontal".format(
+        talude_corte_h / talude_corte_v, ang_corte
+    ))
 with col_ta:
-    talude_aterro_h = st.number_input("Aterro H", value=2.0, min_value=0.1, step=0.5)
-    talude_aterro_v = st.number_input("Aterro V", value=1.0, min_value=0.1, step=0.5)
+    talude_aterro_h = st.number_input("Talude aterro \u2014 H (horizontal)", value=2.0, min_value=0.1, step=0.5)
+    talude_aterro_v = st.number_input("Talude aterro \u2014 V (vertical)", value=1.0, min_value=0.1, step=0.5)
+    ang_aterro = math.degrees(math.atan(talude_aterro_v / talude_aterro_h))
+    st.caption("Inclina\u00e7\u00e3o: 1:{:.0f} (H:V) \u00b7 {:.1f}\u00b0 com a horizontal".format(
+        talude_aterro_h / talude_aterro_v, ang_aterro
+    ))
 
 # Salva parametros no session_state
 parametros = ParametrosPadrao(
@@ -152,14 +161,18 @@ for poly in poligonos:
             resultados[nome] = calcular_volumes(
                 superficie, cota_input, espacamento,
                 remocao_vegetal, categoria_solo, nome,
+                talude_corte_h=parametros.talude_corte_h,
+                talude_corte_v=parametros.talude_corte_v,
+                talude_aterro_h=parametros.talude_aterro_h,
+                talude_aterro_v=parametros.talude_aterro_v,
+                grade=grade,
             )
 
         # Metricas com delta
         cota_proj = cotas[nome]
         res = resultados[nome]
-        amplitude = superficie.elevacao_max - superficie.elevacao_min
 
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric(
             "Area",
             "{:,.0f} m\u00b2".format(grade.area),
@@ -169,12 +182,14 @@ for poly in poligonos:
         c2.metric(
             "Elev. min",
             "{:.2f} m".format(superficie.elevacao_min),
-            delta="{:.2f} m".format(superficie.elevacao_min - cota_proj),
+            delta="{:+.2f} m".format(superficie.elevacao_min - cota_proj),
+            delta_color="inverse",
         )
         c3.metric(
             "Elev. max",
             "{:.2f} m".format(superficie.elevacao_max),
-            delta="{:.2f} m".format(superficie.elevacao_max - cota_proj),
+            delta="{:+.2f} m".format(superficie.elevacao_max - cota_proj),
+            delta_color="inverse",
         )
         c4.metric(
             "Corte",
@@ -186,6 +201,12 @@ for poly in poligonos:
             "Aterro",
             "{:,.1f} m\u00b3".format(res.volume_aterro_compactado),
             delta="{:,.1f} m\u00b3 bruto".format(res.volume_aterro_bruto),
+            delta_color="off",
+        )
+        c6.metric(
+            "Remo\u00e7\u00e3o Vegetal",
+            "{:,.1f} m\u00b3".format(res.volume_remocao_vegetal),
+            delta="{:.2f} m espessura".format(res.remocao_vegetal),
             delta_color="off",
         )
 
@@ -203,9 +224,10 @@ total_corte = sum(r.volume_corte_empolado for r in lista_res)
 total_aterro = sum(r.volume_aterro_compactado for r in lista_res)
 total_bota = sum(r.volume_bota_fora for r in lista_res)
 total_solo = sum(r.volume_solo_importado for r in lista_res)
+total_remocao = sum(r.volume_remocao_vegetal for r in lista_res)
 balanco = total_corte - total_aterro
 
-mc1, mc2, mc3, mc4 = st.columns(4)
+mc1, mc2, mc3, mc4, mc5 = st.columns(5)
 mc1.metric(
     "Corte empolado",
     "{:,.1f} m\u00b3".format(total_corte),
@@ -229,4 +251,10 @@ mc4.metric(
     "{:,.1f} m\u00b3".format(total_solo),
     delta="deficit" if total_solo > 0 else "zero",
     delta_color="inverse" if total_solo > 0 else "off",
+)
+mc5.metric(
+    "Remo\u00e7\u00e3o Vegetal",
+    "{:,.1f} m\u00b3".format(total_remocao),
+    delta="bota-fora direto",
+    delta_color="off",
 )

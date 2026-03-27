@@ -143,6 +143,10 @@ def _serializar_resultado(r: ResultadoVolume) -> dict:
         "elevacao_media_terreno": r.elevacao_media_terreno,
         "remocao_vegetal": r.remocao_vegetal,
         "categoria_solo": r.categoria_solo.value if isinstance(r.categoria_solo, CategoriaSolo) else r.categoria_solo,
+        "volume_remocao_vegetal": r.volume_remocao_vegetal,
+        "area_total_poligono": r.area_total_poligono,
+        "volume_talude_corte": r.volume_talude_corte,
+        "volume_talude_aterro": r.volume_talude_aterro,
     }
 
 
@@ -163,6 +167,10 @@ def _desserializar_resultado(d: dict) -> ResultadoVolume:
         elevacao_media_terreno=d["elevacao_media_terreno"],
         remocao_vegetal=d["remocao_vegetal"],
         categoria_solo=_resolver_categoria(d["categoria_solo"]),
+        volume_remocao_vegetal=d.get("volume_remocao_vegetal", 0.0),
+        area_total_poligono=d.get("area_total_poligono", 0.0),
+        volume_talude_corte=d.get("volume_talude_corte", 0.0),
+        volume_talude_aterro=d.get("volume_talude_aterro", 0.0),
     )
 
 
@@ -292,6 +300,11 @@ def processar_poligonos():
         resultados[poly.nome] = calcular_volumes(
             superficie, cota_input, espacamento,
             remocao_vegetal, categoria_solo, poly.nome,
+            talude_corte_h=parametros.talude_corte_h,
+            talude_corte_v=parametros.talude_corte_v,
+            talude_aterro_h=parametros.talude_aterro_h,
+            talude_aterro_v=parametros.talude_aterro_v,
+            grade=grade,
         )
 
     # Salva como JSON no session_state
