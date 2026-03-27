@@ -261,7 +261,10 @@ def criar_mapa_corte_aterro(
     terreno_ajustado = superficie.elevacao_malha - remocao_vegetal
     delta = cota_projeto - terreno_ajustado
 
-    vmax = max(abs(np.nanmin(delta)), abs(np.nanmax(delta)))
+    if np.all(np.isnan(delta)):
+        vmax = 1.0
+    else:
+        vmax = max(abs(np.nanmin(delta)), abs(np.nanmax(delta)))
 
     fig = go.Figure(data=go.Heatmap(
         x=superficie.grade_x,
