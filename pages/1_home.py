@@ -1,10 +1,8 @@
-"""Pagina inicial - Upload, configuracao de poligonos e metricas."""
+"""Pagina inicial - Configuracao de poligonos e metricas."""
 
 import streamlit as st
-from modulos.estado import renderizar_sidebar, processar_poligonos, obter_dados
+from modulos.estado import processar_poligonos, obter_dados
 from modulos.volumes import calcular_cota_otima, calcular_volumes
-
-renderizar_sidebar()
 
 st.title("\U0001f3d7\ufe0f Terraplenagem - C\u00e1lculo de Volumes")
 st.caption("Importe pol\u00edgonos KML do Google Earth para calcular corte e aterro")
@@ -23,7 +21,7 @@ espacamento = dados["espacamento"]
 remocao_vegetal = dados["remocao_vegetal"]
 categoria_solo = dados["categoria_solo"]
 
-# ─── Secao: Poligonos Carregados ───
+# ─── Poligonos Carregados ───
 st.header("\U0001f4cd Pol\u00edgonos Carregados ({})".format(len(poligonos)))
 
 for poly in poligonos:

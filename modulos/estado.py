@@ -1,4 +1,8 @@
-"""Estado compartilhado entre pages - sidebar, processamento e session_state."""
+"""Estado compartilhado entre pages - processamento e session_state.
+
+O upload e parametros ficam no app.py (entry point).
+Este modulo le os bytes ja salvos no session_state.
+"""
 
 import streamlit as st
 
@@ -15,102 +19,26 @@ from modulos.parametros import (
 )
 
 
-def renderizar_sidebar():
-    """Renderiza sidebar com upload e parametros. Salva tudo em session_state."""
-    with st.sidebar:
-        st.header("\U0001f4c2 Upload de Arquivos")
-        arquivos_kml = st.file_uploader(
-            "Arquivos KML",
-            type=["kml"],
-            accept_multiple_files=True,
-            help="Pol\u00edgonos do Google Earth com eleva\u00e7\u00e3o",
-        )
-
-        st.divider()
-        st.header("\u2699\ufe0f Par\u00e2metros")
-
-        espacamento = st.number_input(
-            "Espa\u00e7amento da grade (m)",
-            min_value=0.5, max_value=500.0, value=10.0, step=1.0,
-            help="Dist\u00e2ncia entre pontos internos da grade",
-        )
-
-        remocao_vegetal = st.number_input(
-            "Remo\u00e7\u00e3o vegetal (m)",
-            min_value=0.0, max_value=2.0, value=0.30, step=0.05,
-        )
-
-        categoria_opcoes = {v: k for k, v in NOMES_CATEGORIA.items()}
-        cat_selecionada = st.selectbox(
-            "Categoria do solo",
-            list(categoria_opcoes.keys()),
-        )
-        categoria_solo = categoria_opcoes[cat_selecionada]
-
-        fatores = FATORES_DNIT[_resolver_categoria(categoria_solo)]
-        st.info(
-            "Empolamento: {} | Homogeneiza\u00e7\u00e3o: {}".format(
-                fatores.empolamento, fatores.homogeneizacao
-            )
-        )
-
-        st.divider()
-        st.subheader("Taludes")
-        col_tc, col_ta = st.columns(2)
-        with col_tc:
-            talude_corte_h = st.number_input("Corte H", value=1.0, min_value=0.1, step=0.5)
-            talude_corte_v = st.number_input("Corte V", value=1.0, min_value=0.1, step=0.5)
-        with col_ta:
-            talude_aterro_h = st.number_input("Aterro H", value=2.0, min_value=0.1, step=0.5)
-            talude_aterro_v = st.number_input("Aterro V", value=1.0, min_value=0.1, step=0.5)
-
-        st.divider()
-        st.subheader("\U0001f511 API Google (opcional)")
-        api_key_google = st.text_input(
-            "Chave API Google Maps",
-            type="password",
-            help="Fallback para eleva\u00e7\u00e3o quando Open-Meteo e OpenTopoData falham",
-        )
-
-    # Salva no session_state
-    st.session_state["arquivos_kml"] = arquivos_kml
-    st.session_state["espacamento"] = espacamento
-    st.session_state["remocao_vegetal"] = remocao_vegetal
-    st.session_state["categoria_solo"] = categoria_solo
-    st.session_state["api_key_google"] = api_key_google
-    st.session_state["parametros"] = ParametrosPadrao(
-        espacamento_grade=espacamento,
-        remocao_vegetal=remocao_vegetal,
-        talude_corte_h=talude_corte_h,
-        talude_corte_v=talude_corte_v,
-        talude_aterro_h=talude_aterro_h,
-        talude_aterro_v=talude_aterro_v,
-        categoria_solo=categoria_solo,
-    )
-
-
 def processar_poligonos():
-    """Processa KMLs e salva grades/superficies/resultados no session_state.
+    """Processa KMLs dos bytes no session_state.
 
     Returns:
         True se dados prontos, False se nao ha arquivos.
     """
-    arquivos_kml = st.session_state.get("arquivos_kml")
-    if not arquivos_kml:
+    kml_bytes = st.session_state.get("kml_bytes")
+    if not kml_bytes:
         return False
 
-    espacamento = st.session_state["espacamento"]
-    remocao_vegetal = st.session_state["remocao_vegetal"]
-    categoria_solo = st.session_state["categoria_solo"]
+    espacamento = st.session_state.get("espacamento", 10.0)
+    remocao_vegetal = st.session_state.get("remocao_vegetal", 0.30)
+    categoria_solo = st.session_state.get("categoria_solo", CategoriaSolo.PRIMEIRA)
     api_key = st.session_state.get("api_key_google") or None
 
-    # Parse KML
+    # Parse KML a partir dos bytes salvos
     todos_poligonos = []
-    for arq in arquivos_kml:
+    for conteudo, nome_arquivo in kml_bytes:
         try:
-            conteudo = arq.read()
-            arq.seek(0)  # reset para re-leitura entre pages
-            polys = ler_arquivo_kml(conteudo, arq.name)
+            polys = ler_arquivo_kml(conteudo, nome_arquivo)
             todos_poligonos.extend(polys)
         except ValueError as e:
             st.error(str(e))
@@ -186,7 +114,7 @@ def obter_dados():
 
 
 def seletor_poligono(key: str) -> str:
-    """Selectbox de poligono reutilizavel. Retorna nome selecionado."""
+    """Selectbox de poligono reutilizavel."""
     nomes = list(st.session_state["resultados"].keys())
     if len(nomes) == 1:
         return nomes[0]
@@ -195,7 +123,6 @@ def seletor_poligono(key: str) -> str:
 
 def pagina_requer_dados():
     """Verifica se dados estao prontos. Se nao, mostra aviso e para."""
-    renderizar_sidebar()
     if not processar_poligonos():
-        st.info("\U0001f446 Fa\u00e7a upload de arquivos KML na barra lateral para come\u00e7ar.")
+        st.info("\U0001f446 Fa\u00e7a upload de arquivos KML na p\u00e1gina Home para come\u00e7ar.")
         st.stop()
