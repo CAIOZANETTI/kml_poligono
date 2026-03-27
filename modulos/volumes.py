@@ -146,6 +146,13 @@ def calcular_cota_otima(
     fator_hom = obter_fator_homogeneizacao(categoria)
 
     # Limites de busca
+    if len(elev_validas) == 0:
+        cota_padrao = superficie.elevacao_media
+        resultado = calcular_volumes(
+            superficie, cota_padrao, espacamento,
+            remocao_vegetal, categoria, nome_poligono,
+        )
+        return cota_padrao, resultado
     margem = 2.0
     cota_min = float(np.nanmin(elev_validas)) - margem
     cota_max = float(np.nanmax(elev_validas)) + margem
