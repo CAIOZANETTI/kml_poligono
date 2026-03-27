@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from modulos.volumes import ResultadoVolume
 from modulos.parametros import (
     ParametrosPadrao, NORMAS_REFERENCIA, NOMES_CATEGORIA, FATORES_DNIT,
+    _resolver_categoria,
 )
 
 
@@ -242,8 +243,8 @@ def gerar_relatorio_gerencial(
     import_icone = _ICONE_ERRO if total_import > 0 else _ICONE_CHECK
 
     cat_nome = NOMES_CATEGORIA[parametros.categoria_solo]
-    fator_emp = FATORES_DNIT[parametros.categoria_solo].empolamento
-    fator_hom = FATORES_DNIT[parametros.categoria_solo].homogeneizacao
+    fator_emp = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].empolamento
+    fator_hom = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].homogeneizacao
     norma_cortes = NORMAS_REFERENCIA["cortes"]
     norma_aterros = NORMAS_REFERENCIA["aterros"]
     normas_todas = ", ".join(NORMAS_REFERENCIA.values())
@@ -385,8 +386,8 @@ def gerar_relatorio_analitico(
     num_poly = len(resultados)
 
     cat_nome = NOMES_CATEGORIA[parametros.categoria_solo]
-    fator_emp = FATORES_DNIT[parametros.categoria_solo].empolamento
-    fator_hom = FATORES_DNIT[parametros.categoria_solo].homogeneizacao
+    fator_emp = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].empolamento
+    fator_hom = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].homogeneizacao
     norma_cortes = NORMAS_REFERENCIA["cortes"]
     norma_aterros = NORMAS_REFERENCIA["aterros"]
     normas_todas = ", ".join(NORMAS_REFERENCIA.values())

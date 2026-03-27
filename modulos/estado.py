@@ -11,6 +11,7 @@ from modulos.volumes import (
 )
 from modulos.parametros import (
     ParametrosPadrao, CategoriaSolo, NOMES_CATEGORIA, FATORES_DNIT,
+    _resolver_categoria,
 )
 
 
@@ -46,7 +47,7 @@ def renderizar_sidebar():
         )
         categoria_solo = categoria_opcoes[cat_selecionada]
 
-        fatores = FATORES_DNIT[categoria_solo]
+        fatores = FATORES_DNIT[_resolver_categoria(categoria_solo)]
         st.info(
             "Empolamento: {} | Homogeneiza\u00e7\u00e3o: {}".format(
                 fatores.empolamento, fatores.homogeneizacao

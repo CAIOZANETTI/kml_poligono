@@ -59,20 +59,39 @@ NORMAS_REFERENCIA = {
 }
 
 
-def obter_fator_empolamento(categoria: CategoriaSolo) -> float:
+def _resolver_categoria(categoria) -> CategoriaSolo:
+    """Converte string ou enum para CategoriaSolo."""
+    if isinstance(categoria, CategoriaSolo):
+        return categoria
+    if isinstance(categoria, str):
+        # Tenta pelo value
+        for cat in CategoriaSolo:
+            if cat.value == categoria:
+                return cat
+        # Tenta pelo nome
+        try:
+            return CategoriaSolo[categoria]
+        except KeyError:
+            pass
+    # Default
+    return CategoriaSolo.PRIMEIRA
+
+
+def obter_fator_empolamento(categoria) -> float:
     """Retorna o fator de empolamento para a categoria de solo."""
-    return FATORES_DNIT[categoria].empolamento
+    return FATORES_DNIT[_resolver_categoria(categoria)].empolamento
 
 
-def obter_fator_homogeneizacao(categoria: CategoriaSolo) -> float:
+def obter_fator_homogeneizacao(categoria) -> float:
     """Retorna o fator de homogeneizacao para a categoria de solo."""
-    return FATORES_DNIT[categoria].homogeneizacao
+    return FATORES_DNIT[_resolver_categoria(categoria)].homogeneizacao
 
 
-def obter_fator_compactacao(categoria: CategoriaSolo) -> float:
+def obter_fator_compactacao(categoria) -> float:
     """Retorna fator compactacao = empolamento * homogeneizacao.
 
     Converte volume de corte in-situ para volume equivalente de aterro compactado.
     """
-    f = FATORES_DNIT[categoria]
+    cat = _resolver_categoria(categoria)
+    f = FATORES_DNIT[cat]
     return f.empolamento * f.homogeneizacao
