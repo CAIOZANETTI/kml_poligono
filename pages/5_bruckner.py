@@ -39,6 +39,15 @@ with col_faixas:
         key="num_faixas_brk",
     )
 
+dlt_input = st.number_input(
+    "DLT (m\u00b3)",
+    value=None,
+    step=100.0,
+    format="%.1f",
+    key="dlt_bruckner",
+    help="Dist\u00e2ncia Limite de Transporte econ\u00f4mico. Acima = bota-fora mais barato.",
+)
+
 faixas = calcular_volumes_por_faixas(
     superficie, cota, espacamento,
     num_faixas=int(num_faixas),
@@ -57,7 +66,7 @@ resultado_brk = construir_diagrama_bruckner(
     fator_homogeneizacao=obter_fator_homogeneizacao(categoria),
 )
 
-fig_brk = plotar_bruckner(resultado_brk)
+fig_brk = plotar_bruckner(resultado_brk, dlt=dlt_input)
 st.plotly_chart(fig_brk, use_container_width=True)
 
 b1, b2, b3 = st.columns(3)
@@ -105,6 +114,14 @@ idx_selecionado = st.selectbox(
 )
 
 faixa_sel = faixas[idx_selecionado]
+
+# AJUSTE 6: Atualiza diagrama com destaque da faixa selecionada
+fig_brk_dest = plotar_bruckner(
+    resultado_brk,
+    dlt=dlt_input,
+    posicao_destaque=faixa_sel["posicao"],
+)
+st.plotly_chart(fig_brk_dest, use_container_width=True)
 
 fc1, fc2, fc3 = st.columns(3)
 fc1.metric(

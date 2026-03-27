@@ -3,12 +3,13 @@
 Referencia: DNIT 106/2009-ES (Cortes), DNIT 108/2009-ES (Aterros).
 """
 
-from dataclasses import dataclass
-from typing import List, Tuple, Dict
+from dataclasses import dataclass, field
+from typing import List, Tuple, Dict, Optional
 
 import numpy as np
 
 from modulos.terreno import SuperficieTerreno
+from modulos.geometria import GradePoligono
 from modulos.parametros import (
     CategoriaSolo,
     obter_fator_empolamento,
@@ -34,6 +35,10 @@ class ResultadoVolume:
     elevacao_media_terreno: float
     remocao_vegetal: float
     categoria_solo: CategoriaSolo
+    volume_remocao_vegetal: float = 0.0   # m3 — area * espessura_remocao
+    area_total_poligono: float = 0.0      # m2 — area do poligono (sem filtro NaN)
+    volume_talude_corte: float = 0.0      # m3 — volume adicional talude corte
+    volume_talude_aterro: float = 0.0     # m3 — volume adicional talude aterro
 
 
 def calcular_volumes(
@@ -43,6 +48,11 @@ def calcular_volumes(
     remocao_vegetal: float = 0.30,
     categoria: CategoriaSolo = CategoriaSolo.PRIMEIRA,
     nome_poligono: str = "",
+    talude_corte_h: float = 1.0,
+    talude_corte_v: float = 1.0,
+    talude_aterro_h: float = 2.0,
+    talude_aterro_v: float = 1.0,
+    grade: Optional[GradePoligono] = None,
 ) -> ResultadoVolume:
     """Calcula volumes de corte e aterro pelo metodo de grade.
 
@@ -62,16 +72,27 @@ def calcular_volumes(
         remocao_vegetal: Camada vegetal removida (m).
         categoria: Categoria de solo DNIT.
         nome_poligono: Nome para referencia.
+        talude_corte_h: Inclinacao horizontal do talude de corte.
+        talude_corte_v: Inclinacao vertical do talude de corte.
+        talude_aterro_h: Inclinacao horizontal do talude de aterro.
+        talude_aterro_v: Inclinacao vertical do talude de aterro.
+        grade: Grade do poligono (necessaria para calculo de taludes).
 
     Returns:
         ResultadoVolume com todos os volumes calculados.
     """
+    from modulos.taludes import calcular_volume_talude_corte, calcular_volume_talude_aterro
+
     area_celula = espacamento ** 2
     elevacoes = superficie.elevacao_grade
 
     # Filtra NaN
     mascara_valida = ~np.isnan(elevacoes)
     elev_validas = elevacoes[mascara_valida]
+
+    # Volume de remocao vegetal
+    volume_remocao_vegetal = float(np.sum(mascara_valida) * area_celula * remocao_vegetal)
+    area_total_poligono = float(np.sum(mascara_valida) * area_celula)
 
     # Delta: positivo = aterro, negativo = corte
     terreno_ajustado = elev_validas - remocao_vegetal
@@ -86,6 +107,21 @@ def calcular_volumes(
 
     area_corte = float(np.sum(mascara_corte) * area_celula)
     area_aterro = float(np.sum(mascara_aterro) * area_celula)
+
+    # Volumes de talude
+    vol_talude_corte = 0.0
+    vol_talude_aterro = 0.0
+    if grade is not None:
+        vol_talude_corte = calcular_volume_talude_corte(
+            grade, superficie, cota_projeto,
+            talude_corte_h, talude_corte_v, remocao_vegetal,
+        )
+        vol_talude_aterro = calcular_volume_talude_aterro(
+            grade, superficie, cota_projeto,
+            talude_aterro_h, talude_aterro_v, remocao_vegetal,
+        )
+        vol_corte_bruto += vol_talude_corte
+        vol_aterro_bruto += vol_talude_aterro
 
     # Aplica fatores DNIT
     fator_emp = obter_fator_empolamento(categoria)
@@ -102,7 +138,7 @@ def calcular_volumes(
     return ResultadoVolume(
         nome_poligono=nome_poligono,
         cota_projeto=cota_projeto,
-        area_total=float(np.sum(mascara_valida) * area_celula),
+        area_total=area_total_poligono,
         volume_corte_bruto=vol_corte_bruto,
         volume_aterro_bruto=vol_aterro_bruto,
         volume_corte_empolado=vol_corte_empolado,
@@ -115,6 +151,10 @@ def calcular_volumes(
         elevacao_media_terreno=superficie.elevacao_media,
         remocao_vegetal=remocao_vegetal,
         categoria_solo=categoria,
+        volume_remocao_vegetal=volume_remocao_vegetal,
+        area_total_poligono=area_total_poligono,
+        volume_talude_corte=vol_talude_corte,
+        volume_talude_aterro=vol_talude_aterro,
     )
 
 

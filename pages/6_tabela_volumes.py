@@ -34,6 +34,9 @@ df = pd.DataFrame([
         "Bota-fora (m\u00b3)": r.volume_bota_fora,
         "Solo import. (m\u00b3)": r.volume_solo_importado,
         "Balanco (m\u00b3)": r.balanco_massa,
+        "Rem. vegetal (m\u00b3)": r.volume_remocao_vegetal,
+        "Talude corte (m\u00b3)": r.volume_talude_corte,
+        "Talude aterro (m\u00b3)": r.volume_talude_aterro,
     }
     for r in lista_res
 ])

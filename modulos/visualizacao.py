@@ -27,6 +27,8 @@ def _offset_xy(superficie: SuperficieTerreno):
 def criar_mapa_contorno(
     superficie: SuperficieTerreno,
     titulo: str = "Curvas de Nivel",
+    cota_projeto: Optional[float] = None,
+    equidistancia: float = 1.0,
 ) -> go.Figure:
     """Cria mapa de curvas de nivel do terreno natural."""
     ox, oy = _offset_xy(superficie)
@@ -39,9 +41,29 @@ def criar_mapa_contorno(
         contours=dict(
             showlabels=True,
             labelfont=dict(size=10, color="white"),
+            size=equidistancia,
         ),
         colorbar=dict(title="Elev. (m)"),
     ))
+
+    if cota_projeto is not None:
+        fig.add_trace(go.Contour(
+            x=superficie.grade_x - ox,
+            y=superficie.grade_y - oy,
+            z=superficie.elevacao_malha,
+            contours=dict(
+                start=cota_projeto,
+                end=cota_projeto,
+                size=0,
+                showlabels=True,
+                labelfont=dict(size=12, color="white"),
+            ),
+            colorscale=[[0, "red"], [1, "red"]],
+            line=dict(width=3),
+            showscale=False,
+            name="Cota projeto",
+            hoverinfo="name+z",
+        ))
 
     fig.update_layout(
         title=titulo,
@@ -223,6 +245,7 @@ def criar_comparacao_3d(
     cota_projeto: float,
     remocao_vegetal: float = 0.30,
     titulo: str = "Terreno vs Projeto",
+    opacidade_projeto: float = 0.5,
 ) -> go.Figure:
     """Cria visualizacao 3D comparando terreno com superficie de projeto.
 
@@ -252,7 +275,7 @@ def criar_comparacao_3d(
         y=superficie.malha_y - oy,
         z=z_projeto,
         colorscale=[[0, "rgba(99,102,241,0.5)"], [1, "rgba(99,102,241,0.5)"]],
-        opacity=0.5,
+        opacity=opacidade_projeto,
         showscale=False,
         name="Projeto (cota = 0)",
         connectgaps=True,
@@ -343,6 +366,8 @@ def criar_perfil_transversal(
 def criar_diagrama_bruckner(
     resultado: ResultadoBruckner,
     titulo: str = "Diagrama de Bruckner",
+    dlt: Optional[float] = None,
+    posicao_destaque: Optional[float] = None,
 ) -> go.Figure:
     """Cria diagrama de Bruckner (curva de massa)."""
     fig = go.Figure()
@@ -376,6 +401,23 @@ def criar_diagrama_bruckner(
         fig.add_vline(
             x=eq - pos_min, line_dash="dot", line_color="green", line_width=1,
             annotation_text="{:.1f}m".format(eq - pos_min),
+        )
+
+    if dlt is not None:
+        fig.add_hline(
+            y=dlt, line_dash="dash", line_color="orange", line_width=2,
+            annotation_text="DLT",
+            annotation_position="top left",
+        )
+
+    if posicao_destaque is not None:
+        pos_rel = posicao_destaque - pos_min
+        fig.add_vline(
+            x=pos_rel,
+            line_color=CORES["aterro"],
+            line_width=2,
+            annotation_text="faixa selecionada",
+            annotation_position="top right",
         )
 
     fig.update_layout(
