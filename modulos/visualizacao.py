@@ -15,14 +15,25 @@ from modulos.tema import CORES
 _TEMPLATE = "plotly_white"
 
 
+# ── Helpers offset ──
+
+def _offset_xy(superficie: SuperficieTerreno):
+    """Retorna (x_min, y_min) para transformar coordenadas em relativas."""
+    return float(superficie.grade_x.min()), float(superficie.grade_y.min())
+
+
+# ── Mapa de contorno ──
+
 def criar_mapa_contorno(
     superficie: SuperficieTerreno,
     titulo: str = "Curvas de Nivel",
 ) -> go.Figure:
     """Cria mapa de curvas de nivel do terreno natural."""
+    ox, oy = _offset_xy(superficie)
+
     fig = go.Figure(data=go.Contour(
-        x=superficie.grade_x,
-        y=superficie.grade_y,
+        x=superficie.grade_x - ox,
+        y=superficie.grade_y - oy,
         z=superficie.elevacao_malha,
         colorscale="Earth",
         contours=dict(
@@ -34,8 +45,8 @@ def criar_mapa_contorno(
 
     fig.update_layout(
         title=titulo,
-        xaxis_title="Easting (m)",
-        yaxis_title="Northing (m)",
+        xaxis_title="X (m)",
+        yaxis_title="Y (m)",
         yaxis_scaleanchor="x",
         template=_TEMPLATE,
         height=600,
@@ -52,8 +63,8 @@ def _preparar_z_3d(
 ) -> tuple:
     """Prepara dados Z para visualizacao 3D."""
     if cota_referencia is not None:
-        z_data = elevacao_malha - cota_referencia
-        z_label = "Altura (m) [- corte / + aterro]"
+        z_data = cota_referencia - elevacao_malha
+        z_label = "Altura (m) [+ aterro / - corte]"
         colorscale = "RdBu"
         colorbar = dict(title="Altura (m)")
         if exagero_vertical > 1:
@@ -78,7 +89,7 @@ def _preparar_z_borda(
 ) -> np.ndarray:
     """Aplica mesma transformacao Z nos pontos de borda."""
     if cota_referencia is not None:
-        borda_z_out = borda_z - cota_referencia
+        borda_z_out = cota_referencia - borda_z
         if exagero_vertical > 1:
             borda_z_out = borda_z_out * exagero_vertical
         return borda_z_out
@@ -96,14 +107,15 @@ def criar_superficie_3d(
 ) -> go.Figure:
     """Cria visualizacao 3D do terreno natural."""
     fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
 
     z_data, z_label, colorscale, colorbar = _preparar_z_3d(
         superficie.elevacao_malha, exagero_vertical, cota_referencia,
     )
 
     fig.add_trace(go.Surface(
-        x=superficie.malha_x,
-        y=superficie.malha_y,
+        x=superficie.malha_x - ox,
+        y=superficie.malha_y - oy,
         z=z_data,
         colorscale=colorscale or "Earth",
         colorbar=colorbar,
@@ -119,8 +131,8 @@ def criar_superficie_3d(
             borda_fechada[:, 2], exagero_vertical, cota_referencia, z_media,
         )
         fig.add_trace(go.Scatter3d(
-            x=borda_fechada[:, 0],
-            y=borda_fechada[:, 1],
+            x=borda_fechada[:, 0] - ox,
+            y=borda_fechada[:, 1] - oy,
             z=borda_z,
             mode="lines+markers",
             line=dict(color=CORES["borda"], width=3),
@@ -131,8 +143,8 @@ def criar_superficie_3d(
     fig.update_layout(
         title=titulo,
         scene=dict(
-            xaxis_title="Easting (m)",
-            yaxis_title="Northing (m)",
+            xaxis_title="X (m)",
+            yaxis_title="Y (m)",
             zaxis_title=z_label,
             aspectmode="data",
         ),
@@ -151,14 +163,15 @@ def criar_superficie_3d_contornos(
 ) -> go.Figure:
     """Cria Surface 3D com contornos projetados no plano Z."""
     fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
 
     z_data, z_label, colorscale, colorbar = _preparar_z_3d(
         superficie.elevacao_malha, exagero_vertical, cota_referencia,
     )
 
     fig.add_trace(go.Surface(
-        x=superficie.malha_x,
-        y=superficie.malha_y,
+        x=superficie.malha_x - ox,
+        y=superficie.malha_y - oy,
         z=z_data,
         colorscale=colorscale or "Viridis",
         colorbar=colorbar if colorscale else dict(title="Elev. (m)"),
@@ -180,8 +193,8 @@ def criar_superficie_3d_contornos(
             borda_fechada[:, 2], exagero_vertical, cota_referencia, z_media,
         )
         fig.add_trace(go.Scatter3d(
-            x=borda_fechada[:, 0],
-            y=borda_fechada[:, 1],
+            x=borda_fechada[:, 0] - ox,
+            y=borda_fechada[:, 1] - oy,
             z=borda_z,
             mode="lines+markers",
             line=dict(color=CORES["borda"], width=3),
@@ -192,8 +205,8 @@ def criar_superficie_3d_contornos(
     fig.update_layout(
         title=titulo,
         scene=dict(
-            xaxis_title="Easting (m)",
-            yaxis_title="Northing (m)",
+            xaxis_title="X (m)",
+            yaxis_title="Y (m)",
             zaxis_title=z_label,
             aspectmode="data",
             camera=dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
@@ -211,79 +224,50 @@ def criar_comparacao_3d(
     remocao_vegetal: float = 0.30,
     titulo: str = "Terreno vs Projeto",
 ) -> go.Figure:
-    """Cria visualizacao 3D comparando terreno com superficie de projeto."""
+    """Cria visualizacao 3D comparando terreno com superficie de projeto.
+
+    Eixo Z relativo a cota do projeto (zero = cota, + aterro, - corte).
+    """
     fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
+
+    z_terreno = cota_projeto - superficie.elevacao_malha
 
     fig.add_trace(go.Surface(
-        x=superficie.malha_x,
-        y=superficie.malha_y,
-        z=superficie.elevacao_malha,
-        colorscale="Earth",
+        x=superficie.malha_x - ox,
+        y=superficie.malha_y - oy,
+        z=z_terreno,
+        colorscale="RdBu",
         opacity=0.85,
         name="Terreno",
-        showscale=False,
+        colorbar=dict(title="Altura (m)"),
         connectgaps=True,
     ))
 
     superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
+    z_projeto = np.where(~np.isnan(superficie_proj), 0.0, np.nan)
+
     fig.add_trace(go.Surface(
-        x=superficie.malha_x,
-        y=superficie.malha_y,
-        z=superficie_proj,
+        x=superficie.malha_x - ox,
+        y=superficie.malha_y - oy,
+        z=z_projeto,
         colorscale=[[0, "rgba(99,102,241,0.5)"], [1, "rgba(99,102,241,0.5)"]],
         opacity=0.5,
         showscale=False,
-        name="Projeto ({:.2f}m)".format(cota_projeto),
+        name="Projeto (cota = 0)",
         connectgaps=True,
     ))
 
     fig.update_layout(
         title=titulo,
         scene=dict(
-            xaxis_title="Easting (m)",
-            yaxis_title="Northing (m)",
-            zaxis_title="Elev. (m)",
+            xaxis_title="X (m)",
+            yaxis_title="Y (m)",
+            zaxis_title="Altura (m) [+ aterro / - corte]",
             aspectmode="data",
         ),
         template=_TEMPLATE,
         height=700,
-    )
-    return fig
-
-
-def criar_mapa_corte_aterro(
-    superficie: SuperficieTerreno,
-    cota_projeto: float,
-    remocao_vegetal: float = 0.30,
-    titulo: str = "Corte / Aterro",
-) -> go.Figure:
-    """Cria mapa 2D com zonas de corte e aterro."""
-    terreno_ajustado = superficie.elevacao_malha - remocao_vegetal
-    delta = cota_projeto - terreno_ajustado
-
-    if np.all(np.isnan(delta)):
-        vmax = 1.0
-    else:
-        vmax = max(abs(np.nanmin(delta)), abs(np.nanmax(delta)))
-
-    fig = go.Figure(data=go.Heatmap(
-        x=superficie.grade_x,
-        y=superficie.grade_y,
-        z=delta,
-        colorscale="RdBu",
-        zmid=0,
-        zmin=-vmax,
-        zmax=vmax,
-        colorbar=dict(title="Delta (m)"),
-    ))
-
-    fig.update_layout(
-        title=titulo,
-        xaxis_title="Easting (m)",
-        yaxis_title="Northing (m)",
-        yaxis_scaleanchor="x",
-        template=_TEMPLATE,
-        height=600,
     )
     return fig
 
@@ -301,6 +285,7 @@ def criar_perfil_transversal(
     """Cria perfil transversal em uma posicao Y fixa."""
     pontos = superficie.pontos_grade_xy
     elevacoes = superficie.elevacao_grade
+    ox = float(pontos[:, 0].min())
 
     if posicao_y is None:
         posicao_y = np.median(pontos[:, 1])
@@ -311,50 +296,43 @@ def criar_perfil_transversal(
         tolerancia = grade.espacamento * 1.5
         mascara = np.abs(pontos[:, 1] - posicao_y) < tolerancia
 
-    xs = pontos[mascara, 0]
+    xs = pontos[mascara, 0] - ox
     zs = elevacoes[mascara]
     ordem = np.argsort(xs)
     xs = xs[ordem]
     zs = zs[ordem]
 
+    # Delta relativo a cota do projeto (+ aterro, - corte)
+    zs_ajustado = zs - remocao_vegetal
+    delta = cota_projeto - zs_ajustado
+
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=xs, y=zs, mode="lines", name="Terreno",
+        x=xs, y=delta, mode="lines", name="Delta (cota - terreno)",
         line=dict(color=CORES["terreno"], width=2),
-        fill="tozeroy", fillcolor="rgba(120,113,108,0.06)",
     ))
 
-    zs_ajustado = zs - remocao_vegetal
-    fig.add_trace(go.Scatter(
-        x=xs, y=zs_ajustado, mode="lines",
-        name="Terreno (-{:.1f}m)".format(remocao_vegetal),
-        line=dict(color=CORES["terreno_dash"], width=1, dash="dash"),
-    ))
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1,
+                  annotation_text="Cota projeto")
+
+    corte_y = np.where(delta < 0, delta, 0)
+    aterro_y = np.where(delta > 0, delta, 0)
 
     fig.add_trace(go.Scatter(
-        x=[xs[0], xs[-1]], y=[cota_projeto, cota_projeto],
-        mode="lines", name="Projeto ({:.2f}m)".format(cota_projeto),
-        line=dict(color=CORES["accent"], width=2),
-    ))
-
-    delta = cota_projeto - zs_ajustado
-    corte_y = np.where(delta < 0, zs_ajustado, cota_projeto)
-    aterro_y = np.where(delta > 0, zs_ajustado, cota_projeto)
-
-    fig.add_trace(go.Scatter(
-        x=xs, y=corte_y, fill="tonexty",
+        x=xs, y=corte_y, fill="tozeroy",
         fillcolor="rgba(225,29,72,0.15)", line=dict(width=0), name="Corte",
     ))
     fig.add_trace(go.Scatter(
-        x=xs, y=aterro_y, fill="tonexty",
+        x=xs, y=aterro_y, fill="tozeroy",
         fillcolor="rgba(99,102,241,0.15)", line=dict(width=0), name="Aterro",
     ))
 
+    oy = float(superficie.pontos_grade_xy[:, 1].min())
     fig.update_layout(
-        title="{} (Y = {:.1f}m)".format(titulo, posicao_y),
-        xaxis_title="Easting (m)",
-        yaxis_title="Elev. (m)",
+        title="{} (Y = {:.1f}m)".format(titulo, posicao_y - oy),
+        xaxis_title="X (m)",
+        yaxis_title="Altura (m) [+ aterro / - corte]",
         template=_TEMPLATE,
         height=500,
         legend=dict(x=0.01, y=0.99),
@@ -370,10 +348,12 @@ def criar_diagrama_bruckner(
     fig = go.Figure()
 
     pos = resultado.posicoes
+    # Offset para metros relativos
+    pos_offset = pos - pos.min() if len(pos) > 0 else pos
     vol = resultado.volumes_acumulados
 
     fig.add_trace(go.Scatter(
-        x=pos, y=vol, mode="lines", name="Volume acumulado",
+        x=pos_offset, y=vol, mode="lines", name="Volume acumulado",
         line=dict(color=CORES["accent"], width=2),
     ))
 
@@ -381,20 +361,21 @@ def criar_diagrama_bruckner(
     vol_neg = np.where(vol < 0, vol, 0)
 
     fig.add_trace(go.Scatter(
-        x=pos, y=vol_pos, fill="tozeroy",
+        x=pos_offset, y=vol_pos, fill="tozeroy",
         fillcolor="rgba(225,29,72,0.15)", line=dict(width=0), name="Bota-fora",
     ))
     fig.add_trace(go.Scatter(
-        x=pos, y=vol_neg, fill="tozeroy",
+        x=pos_offset, y=vol_neg, fill="tozeroy",
         fillcolor="rgba(99,102,241,0.15)", line=dict(width=0), name="Emprestimo",
     ))
 
     fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1)
 
+    pos_min = pos.min() if len(pos) > 0 else 0
     for eq in resultado.pontos_equilibrio:
         fig.add_vline(
-            x=eq, line_dash="dot", line_color="green", line_width=1,
-            annotation_text="{:.1f}m".format(eq),
+            x=eq - pos_min, line_dash="dot", line_color="green", line_width=1,
+            annotation_text="{:.1f}m".format(eq - pos_min),
         )
 
     fig.update_layout(
@@ -502,49 +483,38 @@ def criar_perfil_faixa(
     projeto = perfil["projeto"]
     delta = perfil["delta"]
 
+    # Offset para metros relativos
+    pos_offset = pos - pos.min() if len(pos) > 0 else pos
+
     direcao = faixa.get("direcao", "norte_sul")
-    eixo_label = "Easting (m)" if direcao == "norte_sul" else "Northing (m)"
+    eixo_label = "X (m)" if direcao == "norte_sul" else "Y (m)"
 
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=pos, y=terreno, mode="lines", name="Terreno",
+        x=pos_offset, y=delta, mode="lines", name="Delta (cota - terreno)",
         line=dict(color=CORES["terreno"], width=2),
     ))
-    fig.add_trace(go.Scatter(
-        x=pos, y=terreno_aj, mode="lines", name="Terreno ajustado",
-        line=dict(color=CORES["terreno_dash"], width=1, dash="dash"),
-    ))
 
-    cota = float(projeto[0]) if len(projeto) > 0 else 0
-    fig.add_trace(go.Scatter(
-        x=pos, y=projeto, mode="lines",
-        name="Projeto ({:.2f}m)".format(cota),
-        line=dict(color=CORES["accent"], width=2),
-    ))
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1,
+                  annotation_text="Cota projeto")
 
-    corte_y = np.where(delta < 0, terreno_aj, projeto)
-    fig.add_trace(go.Scatter(
-        x=pos, y=corte_y, mode="lines", line=dict(width=0), showlegend=False,
-    ))
-    fig.add_trace(go.Scatter(
-        x=pos, y=projeto, fill="tonexty",
-        fillcolor="rgba(225,29,72,0.2)", line=dict(width=0), name="Corte",
-    ))
+    corte_y = np.where(delta < 0, delta, 0)
+    aterro_y = np.where(delta > 0, delta, 0)
 
-    aterro_y = np.where(delta > 0, terreno_aj, projeto)
     fig.add_trace(go.Scatter(
-        x=pos, y=projeto, mode="lines", line=dict(width=0), showlegend=False,
+        x=pos_offset, y=corte_y, fill="tozeroy",
+        fillcolor="rgba(225,29,72,0.15)", line=dict(width=0), name="Corte",
     ))
     fig.add_trace(go.Scatter(
-        x=pos, y=aterro_y, fill="tonexty",
-        fillcolor="rgba(99,102,241,0.2)", line=dict(width=0), name="Aterro",
+        x=pos_offset, y=aterro_y, fill="tozeroy",
+        fillcolor="rgba(99,102,241,0.15)", line=dict(width=0), name="Aterro",
     ))
 
     fig.update_layout(
         title=titulo,
         xaxis_title=eixo_label,
-        yaxis_title="Elev. (m)",
+        yaxis_title="Altura (m) [+ aterro / - corte]",
         template=_TEMPLATE,
         height=450,
         legend=dict(x=0.01, y=0.99),

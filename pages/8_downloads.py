@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 from modulos.estado import pagina_requer_dados, obter_dados
 from modulos.visualizacao import (
-    criar_mapa_contorno, criar_mapa_corte_aterro,
+    criar_mapa_contorno,
     criar_superficie_3d, criar_comparacao_3d,
     criar_grafico_barras_volumes,
 )
@@ -33,9 +33,6 @@ figuras = {}
 for nome in nomes:
     figuras["Curvas de N\u00edvel - {}".format(nome)] = criar_mapa_contorno(
         superficies[nome], titulo="Curvas de N\u00edvel - {}".format(nome),
-    )
-    figuras["Corte/Aterro - {}".format(nome)] = criar_mapa_corte_aterro(
-        superficies[nome], cotas[nome], remocao_vegetal,
     )
     figuras["3D Terreno - {}".format(nome)] = criar_superficie_3d(
         superficies[nome], grades[nome],
