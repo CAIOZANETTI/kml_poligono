@@ -7,11 +7,11 @@ from modulos.visualizacao import criar_mapa_contorno
 pagina_requer_dados()
 dados = obter_dados()
 
-st.header("\U0001f5fa\ufe0f Curvas de N\u00edvel")
+st.title("Curvas de nivel")
 
 nome = seletor_poligono("contorno")
 fig = criar_mapa_contorno(
     dados["superficies"][nome],
-    titulo="Curvas de N\u00edvel - {}".format(nome),
+    titulo="curvas de nivel — {}".format(nome),
 )
 st.plotly_chart(fig, use_container_width=True)

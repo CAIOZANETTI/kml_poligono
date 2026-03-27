@@ -8,13 +8,13 @@ from modulos.volumes import calcular_volumes_por_faixas, extrair_perfil_faixa
 from modulos.bruckner import construir_diagrama_bruckner, identificar_zonas_transporte
 from modulos.visualizacao import criar_diagrama_bruckner as plotar_bruckner, criar_perfil_faixa
 from modulos.parametros import obter_fator_empolamento, obter_fator_homogeneizacao
+from modulos.tema import section_header
 
 pagina_requer_dados()
 dados = obter_dados()
 
-st.header("\U0001f4c8 Diagrama de Br\u00fcckner")
+st.title("Diagrama de Bruckner")
 
-# ─── 1. Selecionar poligono ───
 nome = seletor_poligono("bruckner")
 
 espacamento = dados["espacamento"]
@@ -23,11 +23,10 @@ categoria = dados["categoria_solo"]
 cota = dados["cotas"][nome]
 superficie = dados["superficies"][nome]
 
-# ─── 2. Selecionar direcao e num faixas ───
 col_dir, col_faixas = st.columns([2, 1])
 with col_dir:
     direcao = st.radio(
-        "Dire\u00e7\u00e3o do corte",
+        "Direcao do corte",
         ["Norte-Sul (ao longo de Y)", "Leste-Oeste (ao longo de X)"],
         horizontal=True,
         key="dir_bruckner",
@@ -36,12 +35,11 @@ with col_dir:
 
 with col_faixas:
     num_faixas = st.slider(
-        "N\u00famero de faixas",
+        "Numero de faixas",
         min_value=3, max_value=50, value=15, step=1,
         key="num_faixas_brk",
     )
 
-# ─── 3. Calcular faixas ───
 faixas = calcular_volumes_por_faixas(
     superficie, cota, espacamento,
     num_faixas=int(num_faixas),
@@ -51,10 +49,9 @@ faixas = calcular_volumes_por_faixas(
 )
 
 if not faixas:
-    st.warning("Nenhuma faixa calculada. Verifique o pol\u00edgono e par\u00e2metros.")
+    st.warning("Nenhuma faixa calculada. Verifique o poligono e parametros.")
     st.stop()
 
-# ─── 4. Diagrama de Bruckner ───
 resultado_brk = construir_diagrama_bruckner(
     faixas,
     fator_empolamento=obter_fator_empolamento(categoria),
@@ -64,15 +61,13 @@ resultado_brk = construir_diagrama_bruckner(
 fig_brk = plotar_bruckner(resultado_brk)
 st.plotly_chart(fig_brk, use_container_width=True)
 
-# Metricas
 b1, b2, b3 = st.columns(3)
 b1.metric("DMT", "{:,.1f} m".format(resultado_brk.dmt))
 b2.metric("Bota-fora", "{:,.1f} m\u00b3".format(resultado_brk.volume_bota_fora))
-b3.metric("Solo Importado", "{:,.1f} m\u00b3".format(resultado_brk.volume_solo_importado))
+b3.metric("Solo importado", "{:,.1f} m\u00b3".format(resultado_brk.volume_solo_importado))
 
-# ─── 5. Tabela de faixas com selecao ───
-st.divider()
-st.subheader("Volumes por Faixa")
+# ─── Volumes por faixa ───
+section_header("volumes por faixa")
 
 df_faixas = pd.DataFrame(faixas)
 colunas_exibir = [
@@ -82,9 +77,8 @@ colunas_exibir = [
 colunas_disponiveis = [c for c in colunas_exibir if c in df_faixas.columns]
 st.dataframe(df_faixas[colunas_disponiveis], use_container_width=True)
 
-# ─── 6. Selecionar faixa para ver perfil ───
-st.divider()
-st.subheader("\U0001f50d Perfil da Faixa Selecionada")
+# ─── Perfil da faixa selecionada ───
+section_header("perfil da faixa")
 
 opcoes_faixa = ["Faixa {} (pos: {:.1f}m)".format(f["faixa"], f["posicao"]) for f in faixas]
 idx_selecionado = st.selectbox(
@@ -96,13 +90,11 @@ idx_selecionado = st.selectbox(
 
 faixa_sel = faixas[idx_selecionado]
 
-# Metricas da faixa
 fc1, fc2, fc3 = st.columns(3)
-fc1.metric("Corte Empolado", "{:,.2f} m\u00b3".format(faixa_sel["vol_corte_empolado"]))
-fc2.metric("Aterro Compactado", "{:,.2f} m\u00b3".format(faixa_sel["vol_aterro_compactado"]))
-fc3.metric("Balan\u00e7o", "{:,.2f} m\u00b3".format(faixa_sel["balanco"]))
+fc1.metric("Corte empolado", "{:,.2f} m\u00b3".format(faixa_sel["vol_corte_empolado"]))
+fc2.metric("Aterro compactado", "{:,.2f} m\u00b3".format(faixa_sel["vol_aterro_compactado"]))
+fc3.metric("Balanco", "{:,.2f} m\u00b3".format(faixa_sel["balanco"]))
 
-# Perfil da faixa
 perfil = extrair_perfil_faixa(
     superficie, faixa_sel, cota, espacamento, remocao_vegetal,
 )
@@ -111,15 +103,14 @@ if len(perfil["posicoes"]) > 1:
     dir_label = "N-S" if direcao_key == "norte_sul" else "L-O"
     fig_perfil = criar_perfil_faixa(
         perfil, faixa_sel,
-        titulo="Perfil Faixa {} ({}) - {}".format(faixa_sel["faixa"], dir_label, nome),
+        titulo="perfil faixa {} ({}) — {}".format(faixa_sel["faixa"], dir_label, nome),
     )
     st.plotly_chart(fig_perfil, use_container_width=True)
 else:
     st.info("Faixa com poucos pontos para gerar perfil.")
 
-# ─── 7. Zonas de transporte ───
-st.divider()
-st.subheader("Zonas de Transporte")
+# ─── Zonas de transporte ───
+section_header("zonas de transporte")
 df_zonas = identificar_zonas_transporte(resultado_brk)
 if not df_zonas.empty:
     st.dataframe(df_zonas, use_container_width=True)
