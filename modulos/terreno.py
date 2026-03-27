@@ -128,7 +128,6 @@ def criar_malha_2d(
         (malha_x, malha_y, malha_valores) todos arrays 2D.
     """
     pontos = grade.pontos_grade
-    esp = grade.espacamento
 
     # Coordenadas unicas
     xs = np.unique(pontos[:, 0])
@@ -137,14 +136,12 @@ def criar_malha_2d(
     malha_x, malha_y = np.meshgrid(xs, ys)
     malha_vals = np.full(malha_x.shape, np.nan)
 
-    # Mapeia pontos da grade para indices da malha
-    x_to_idx = {x: i for i, x in enumerate(xs)}
-    y_to_idx = {y: i for i, y in enumerate(ys)}
+    # Mapeia pontos para indices via numpy searchsorted (vetorizado)
+    xi = np.searchsorted(xs, pontos[:, 0])
+    yi = np.searchsorted(ys, pontos[:, 1])
 
-    for k in range(len(pontos)):
-        xi = x_to_idx.get(pontos[k, 0])
-        yi = y_to_idx.get(pontos[k, 1])
-        if xi is not None and yi is not None:
-            malha_vals[yi, xi] = valores[k]
+    # Valida que indices estao dentro dos limites
+    mascara = (xi < len(xs)) & (yi < len(ys))
+    malha_vals[yi[mascara], xi[mascara]] = valores[mascara]
 
     return malha_x, malha_y, malha_vals
