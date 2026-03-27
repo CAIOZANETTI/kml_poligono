@@ -119,13 +119,7 @@ for poly in poligonos:
     superficie = superficies[nome]
 
     with st.expander(nome, expanded=True):
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Pontos", len(poly.pontos))
-        c2.metric("Area", "{:,.0f} m\u00b2".format(grade.area))
-        c3.metric("Perimetro", "{:,.0f} m".format(grade.perimetro))
-        c4.metric("Elev. min", "{:.2f} m".format(superficie.elevacao_min))
-        c5.metric("Elev. max", "{:.2f} m".format(superficie.elevacao_max))
-
+        # Cota do projeto
         col_cota, col_otima = st.columns([3, 1])
         with col_cota:
             cota_input = st.number_input(
@@ -160,6 +154,41 @@ for poly in poligonos:
                 remocao_vegetal, categoria_solo, nome,
             )
 
+        # Metricas com delta
+        cota_proj = cotas[nome]
+        res = resultados[nome]
+        amplitude = superficie.elevacao_max - superficie.elevacao_min
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric(
+            "Area",
+            "{:,.0f} m\u00b2".format(grade.area),
+            delta="{:,.0f} m perim.".format(grade.perimetro),
+            delta_color="off",
+        )
+        c2.metric(
+            "Elev. min",
+            "{:.2f} m".format(superficie.elevacao_min),
+            delta="{:.2f} m".format(superficie.elevacao_min - cota_proj),
+        )
+        c3.metric(
+            "Elev. max",
+            "{:.2f} m".format(superficie.elevacao_max),
+            delta="{:.2f} m".format(superficie.elevacao_max - cota_proj),
+        )
+        c4.metric(
+            "Corte",
+            "{:,.1f} m\u00b3".format(res.volume_corte_empolado),
+            delta="{:,.1f} m\u00b3 bruto".format(res.volume_corte_bruto),
+            delta_color="off",
+        )
+        c5.metric(
+            "Aterro",
+            "{:,.1f} m\u00b3".format(res.volume_aterro_compactado),
+            delta="{:,.1f} m\u00b3 bruto".format(res.volume_aterro_bruto),
+            delta_color="off",
+        )
+
 salvar_dados_sessao(
     poligonos, grades, superficies, resultados, cotas,
     parametros, espacamento, remocao_vegetal, categoria_solo,
@@ -170,12 +199,34 @@ st.divider()
 st.subheader("Resumo")
 lista_res = list(resultados.values())
 
+total_corte = sum(r.volume_corte_empolado for r in lista_res)
+total_aterro = sum(r.volume_aterro_compactado for r in lista_res)
+total_bota = sum(r.volume_bota_fora for r in lista_res)
+total_solo = sum(r.volume_solo_importado for r in lista_res)
+balanco = total_corte - total_aterro
+
 mc1, mc2, mc3, mc4 = st.columns(4)
-mc1.metric("Corte empolado", "{:,.1f} m\u00b3".format(
-    sum(r.volume_corte_empolado for r in lista_res)))
-mc2.metric("Aterro compactado", "{:,.1f} m\u00b3".format(
-    sum(r.volume_aterro_compactado for r in lista_res)))
-mc3.metric("Bota-fora", "{:,.1f} m\u00b3".format(
-    sum(r.volume_bota_fora for r in lista_res)))
-mc4.metric("Solo importado", "{:,.1f} m\u00b3".format(
-    sum(r.volume_solo_importado for r in lista_res)))
+mc1.metric(
+    "Corte empolado",
+    "{:,.1f} m\u00b3".format(total_corte),
+    delta="{:,.1f} m\u00b3 balanco".format(balanco),
+    delta_color="off",
+)
+mc2.metric(
+    "Aterro compactado",
+    "{:,.1f} m\u00b3".format(total_aterro),
+    delta="{} poligonos".format(len(lista_res)),
+    delta_color="off",
+)
+mc3.metric(
+    "Bota-fora",
+    "{:,.1f} m\u00b3".format(total_bota),
+    delta="excesso" if total_bota > 0 else "zero",
+    delta_color="inverse" if total_bota > 0 else "off",
+)
+mc4.metric(
+    "Solo importado",
+    "{:,.1f} m\u00b3".format(total_solo),
+    delta="deficit" if total_solo > 0 else "zero",
+    delta_color="inverse" if total_solo > 0 else "off",
+)

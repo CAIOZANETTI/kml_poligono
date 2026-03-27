@@ -61,9 +61,24 @@ fig_brk = plotar_bruckner(resultado_brk)
 st.plotly_chart(fig_brk, use_container_width=True)
 
 b1, b2, b3 = st.columns(3)
-b1.metric("DMT", "{:,.1f} m".format(resultado_brk.dmt))
-b2.metric("Bota-fora", "{:,.1f} m\u00b3".format(resultado_brk.volume_bota_fora))
-b3.metric("Solo importado", "{:,.1f} m\u00b3".format(resultado_brk.volume_solo_importado))
+b1.metric(
+    "DMT",
+    "{:,.1f} m".format(resultado_brk.dmt),
+    delta="{} faixas".format(len(faixas)),
+    delta_color="off",
+)
+b2.metric(
+    "Bota-fora",
+    "{:,.1f} m\u00b3".format(resultado_brk.volume_bota_fora),
+    delta="excesso" if resultado_brk.volume_bota_fora > 0 else "zero",
+    delta_color="inverse" if resultado_brk.volume_bota_fora > 0 else "off",
+)
+b3.metric(
+    "Solo importado",
+    "{:,.1f} m\u00b3".format(resultado_brk.volume_solo_importado),
+    delta="deficit" if resultado_brk.volume_solo_importado > 0 else "zero",
+    delta_color="inverse" if resultado_brk.volume_solo_importado > 0 else "off",
+)
 
 # ─── Volumes por faixa ───
 st.divider()
@@ -92,9 +107,25 @@ idx_selecionado = st.selectbox(
 faixa_sel = faixas[idx_selecionado]
 
 fc1, fc2, fc3 = st.columns(3)
-fc1.metric("Corte empolado", "{:,.2f} m\u00b3".format(faixa_sel["vol_corte_empolado"]))
-fc2.metric("Aterro compactado", "{:,.2f} m\u00b3".format(faixa_sel["vol_aterro_compactado"]))
-fc3.metric("Balanco", "{:,.2f} m\u00b3".format(faixa_sel["balanco"]))
+fc1.metric(
+    "Corte empolado",
+    "{:,.2f} m\u00b3".format(faixa_sel["vol_corte_empolado"]),
+    delta="{:,.2f} m\u00b3 bruto".format(faixa_sel["vol_corte"]),
+    delta_color="off",
+)
+fc2.metric(
+    "Aterro compactado",
+    "{:,.2f} m\u00b3".format(faixa_sel["vol_aterro_compactado"]),
+    delta="{:,.2f} m\u00b3 bruto".format(faixa_sel["vol_aterro"]),
+    delta_color="off",
+)
+bal = faixa_sel["balanco"]
+fc3.metric(
+    "Balanco",
+    "{:,.2f} m\u00b3".format(bal),
+    delta="corte > aterro" if bal > 0 else "aterro > corte" if bal < 0 else "equilibrado",
+    delta_color="normal" if bal >= 0 else "inverse",
+)
 
 perfil = extrair_perfil_faixa(
     superficie, faixa_sel, cota, espacamento, remocao_vegetal,
