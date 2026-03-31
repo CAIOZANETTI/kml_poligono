@@ -20,7 +20,7 @@ pg_contorno = st.Page("pages/2_curvas_nivel.py", title="Curvas de nivel")
 pg_3d = st.Page("pages/3_terreno_3d.py", title="Terreno 3D")
 pg_comp = st.Page("pages/4_corte_aterro_3d.py", title="Corte Aterro 3D")
 pg_bruckner = st.Page("pages/5_bruckner.py", title="Bruckner")
-pg_tabela = st.Page("pages/6_tabela_volumes.py", title="Volumes")
+pg_tabela = st.Page("pages/6_tabela_volumes.py", title="Memoria de Calculo")
 pg_download = st.Page("pages/7_downloads.py", title="Downloads")
 
 nav = st.navigation({
