@@ -14,8 +14,8 @@ nome = seletor_poligono("comp")
 cota_exib = dados["cotas"][nome]
 st.info(
     "Eixo Z relativo \u00e0 cota de projeto ({:.2f} m). "
-    "**Azul (acima de zero)** = aterro necess\u00e1rio. "
-    "**Vermelho (abaixo de zero)** = corte necess\u00e1rio.".format(cota_exib)
+    "**\U0001f7e6 Azul (acima de zero)** = aterro necess\u00e1rio \u2014 "
+    "**\U0001f7e5 Vermelho (abaixo de zero)** = corte necess\u00e1rio.".format(cota_exib)
 )
 
 opacidade_proj = st.slider(

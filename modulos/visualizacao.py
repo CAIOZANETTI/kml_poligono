@@ -239,6 +239,66 @@ def criar_superficie_3d_contornos(
     return fig
 
 
+def _grid_to_mesh3d(mx, my, z, cor, nome, opacidade=0.85, mascara_face=None):
+    """Converte grade regular em trace Mesh3d com triangulacao explicita.
+
+    Parameters
+    ----------
+    mx, my, z : 2-D arrays (mesma shape)
+    cor : cor unica para todas as faces
+    nome : nome do trace (legenda)
+    opacidade : opacidade do mesh
+    mascara_face : bool array (n_faces,) – quais faces incluir
+    """
+    nrows, ncols = mx.shape
+    x_flat = mx.ravel().astype(float)
+    y_flat = my.ravel().astype(float)
+    z_flat = z.ravel().astype(float)
+
+    # Indices dos vertices de cada celula da grade
+    r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")
+    r = r.ravel()
+    c = c.ravel()
+
+    v00 = r * ncols + c
+    v01 = r * ncols + c + 1
+    v10 = (r + 1) * ncols + c
+    v11 = (r + 1) * ncols + c + 1
+
+    # Cada celula → 2 triangulos
+    i_arr = np.concatenate([v00, v01])
+    j_arr = np.concatenate([v01, v11])
+    k_arr = np.concatenate([v10, v10])
+
+    # Remover triangulos com vertice NaN
+    valid = (
+        ~np.isnan(z_flat[i_arr])
+        & ~np.isnan(z_flat[j_arr])
+        & ~np.isnan(z_flat[k_arr])
+    )
+    i_arr, j_arr, k_arr = i_arr[valid], j_arr[valid], k_arr[valid]
+
+    if mascara_face is not None:
+        mascara_face = mascara_face[valid]
+        i_arr = i_arr[mascara_face]
+        j_arr = j_arr[mascara_face]
+        k_arr = k_arr[mascara_face]
+
+    if len(i_arr) == 0:
+        return None
+
+    return go.Mesh3d(
+        x=x_flat, y=y_flat, z=z_flat,
+        i=i_arr, j=j_arr, k=k_arr,
+        color=cor,
+        opacity=opacidade,
+        name=nome,
+        flatshading=False,
+        lighting=dict(ambient=0.6, diffuse=0.8, specular=0.2),
+        showlegend=True,
+    )
+
+
 def criar_comparacao_3d(
     superficie: SuperficieTerreno,
     cota_projeto: float,
@@ -248,30 +308,62 @@ def criar_comparacao_3d(
 ) -> go.Figure:
     """Cria visualizacao 3D comparando terreno com superficie de projeto.
 
+    Usa Mesh3d com cores distintas: vermelho para corte, azul para aterro.
     Eixo Z relativo a cota do projeto (zero = cota, + aterro, - corte).
     """
     fig = go.Figure()
     ox, oy = _offset_xy(superficie)
 
+    mx = superficie.malha_x - ox
+    my = superficie.malha_y - oy
     z_terreno = cota_projeto - superficie.elevacao_malha
 
-    fig.add_trace(go.Surface(
-        x=superficie.malha_x - ox,
-        y=superficie.malha_y - oy,
-        z=z_terreno,
-        colorscale="RdBu",
-        opacity=0.85,
-        name="Terreno",
-        colorbar=dict(title="Altura (m)"),
-        connectgaps=True,
-    ))
+    # ── Classificar cada face como corte ou aterro ──
+    nrows, ncols = z_terreno.shape
+    z_flat = z_terreno.ravel().astype(float)
 
+    r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")
+    r = r.ravel()
+    c = c.ravel()
+
+    v00 = r * ncols + c
+    v01 = r * ncols + c + 1
+    v10 = (r + 1) * ncols + c
+    v11 = (r + 1) * ncols + c + 1
+
+    # Centroide Z de cada triangulo (2 triangulos por celula)
+    z_cent_t1 = (z_flat[v00] + z_flat[v01] + z_flat[v10]) / 3.0
+    z_cent_t2 = (z_flat[v01] + z_flat[v11] + z_flat[v10]) / 3.0
+    z_centroid = np.concatenate([z_cent_t1, z_cent_t2])
+
+    mascara_aterro = z_centroid >= 0
+    mascara_corte = z_centroid < 0
+
+    # ── Mesh3d: Aterro (azul) ──
+    trace_aterro = _grid_to_mesh3d(
+        mx, my, z_terreno, CORES["aterro"],
+        "Aterro (+)", opacidade=0.85,
+        mascara_face=mascara_aterro,
+    )
+    if trace_aterro is not None:
+        fig.add_trace(trace_aterro)
+
+    # ── Mesh3d: Corte (vermelho) ──
+    trace_corte = _grid_to_mesh3d(
+        mx, my, z_terreno, CORES["corte"],
+        "Corte (\u2212)", opacidade=0.85,
+        mascara_face=mascara_corte,
+    )
+    if trace_corte is not None:
+        fig.add_trace(trace_corte)
+
+    # ── Plano de projeto (z = 0) ──
     superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
     z_projeto = np.where(~np.isnan(superficie_proj), 0.0, np.nan)
 
     fig.add_trace(go.Surface(
-        x=superficie.malha_x - ox,
-        y=superficie.malha_y - oy,
+        x=mx,
+        y=my,
         z=z_projeto,
         colorscale=[[0, "rgba(99,102,241,0.5)"], [1, "rgba(99,102,241,0.5)"]],
         opacity=opacidade_projeto,
@@ -285,11 +377,15 @@ def criar_comparacao_3d(
         scene=dict(
             xaxis_title="X (m)",
             yaxis_title="Y (m)",
-            zaxis_title="Altura (m) [+ aterro / - corte]",
+            zaxis_title="Altura (m) [+ aterro / \u2212 corte]",
             aspectmode="data",
         ),
         template=_TEMPLATE,
         height=700,
+        legend=dict(
+            x=0.01, y=0.99,
+            bgcolor="rgba(255,255,255,0.8)",
+        ),
     )
     return fig
 
