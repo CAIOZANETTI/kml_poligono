@@ -239,23 +239,8 @@ def criar_superficie_3d_contornos(
     return fig
 
 
-def _grid_to_mesh3d(mx, my, z, cor, nome, opacidade=0.85, mascara_face=None):
-    """Converte grade regular em trace Mesh3d com triangulacao explicita.
-
-    Parameters
-    ----------
-    mx, my, z : 2-D arrays (mesma shape)
-    cor : cor unica para todas as faces
-    nome : nome do trace (legenda)
-    opacidade : opacidade do mesh
-    mascara_face : bool array (n_faces,) – quais faces incluir
-    """
-    nrows, ncols = mx.shape
-    x_flat = mx.ravel().astype(float)
-    y_flat = my.ravel().astype(float)
-    z_flat = z.ravel().astype(float)
-
-    # Indices dos vertices de cada celula da grade
+def _triangular_grade(nrows, ncols):
+    """Retorna indices de triangulos (i, j, k) para grade nrows x ncols."""
     r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")
     r = r.ravel()
     c = c.ravel()
@@ -265,51 +250,115 @@ def _grid_to_mesh3d(mx, my, z, cor, nome, opacidade=0.85, mascara_face=None):
     v10 = (r + 1) * ncols + c
     v11 = (r + 1) * ncols + c + 1
 
-    # Cada celula → 2 triangulos
     i_arr = np.concatenate([v00, v01])
     j_arr = np.concatenate([v01, v11])
     k_arr = np.concatenate([v10, v10])
+    return i_arr, j_arr, k_arr
+
+
+def _criar_solido_mesh3d(mx, my, z_terreno, cor, nome, mascara_face, opacidade=0.85):
+    """Cria Mesh3d solido fechado (topo + base z=0 + paredes laterais).
+
+    O solido e formado entre a superficie do terreno e o plano z=0.
+    """
+    nrows, ncols = mx.shape
+    x_flat = mx.ravel().astype(float)
+    y_flat = my.ravel().astype(float)
+    z_flat = z_terreno.ravel().astype(float)
+    n_verts = len(x_flat)
+
+    i_all, j_all, k_all = _triangular_grade(nrows, ncols)
 
     # Remover triangulos com vertice NaN
     valid = (
-        ~np.isnan(z_flat[i_arr])
-        & ~np.isnan(z_flat[j_arr])
-        & ~np.isnan(z_flat[k_arr])
+        ~np.isnan(z_flat[i_all])
+        & ~np.isnan(z_flat[j_all])
+        & ~np.isnan(z_flat[k_all])
     )
-    i_arr, j_arr, k_arr = i_arr[valid], j_arr[valid], k_arr[valid]
 
-    if mascara_face is not None:
-        mascara_face = mascara_face[valid]
-        i_arr = i_arr[mascara_face]
-        j_arr = j_arr[mascara_face]
-        k_arr = k_arr[mascara_face]
+    # Aplicar mascara de regiao (corte ou aterro)
+    regiao = mascara_face[valid]
+    i_top = i_all[valid][regiao]
+    j_top = j_all[valid][regiao]
+    k_top = k_all[valid][regiao]
 
-    if len(i_arr) == 0:
+    if len(i_top) == 0:
         return None
 
+    # ── Vertices: terreno (0..n-1) + base em z=0 (n..2n-1) ──
+    x_all = np.concatenate([x_flat, x_flat])
+    y_all = np.concatenate([y_flat, y_flat])
+    z_all = np.concatenate([z_flat, np.zeros_like(z_flat)])
+
+    # ── Face superior: triangulos do terreno ──
+    # (ja temos i_top, j_top, k_top)
+
+    # ── Face inferior: mesmos triangulos em z=0, winding invertido ──
+    i_bot = j_top + n_verts
+    j_bot = i_top + n_verts
+    k_bot = k_top + n_verts
+
+    # ── Paredes laterais: arestas de contorno ──
+    # Aresta de contorno = aparece em apenas 1 triangulo
+    edges_a = np.stack([np.minimum(i_top, j_top), np.maximum(i_top, j_top)], axis=1)
+    edges_b = np.stack([np.minimum(j_top, k_top), np.maximum(j_top, k_top)], axis=1)
+    edges_c = np.stack([np.minimum(k_top, i_top), np.maximum(k_top, i_top)], axis=1)
+    all_edges = np.vstack([edges_a, edges_b, edges_c])
+
+    # Encontrar arestas unicas e suas contagens
+    all_edges_sorted = all_edges[np.lexsort((all_edges[:, 1], all_edges[:, 0]))]
+    # Comparar vizinhos para detectar duplicatas
+    diff = np.any(all_edges_sorted[1:] != all_edges_sorted[:-1], axis=1)
+    # Uma aresta e contorno se nao tem vizinho igual
+    is_first = np.concatenate([[True], diff])
+    is_last = np.concatenate([diff, [True]])
+    boundary_mask = is_first & is_last
+    boundary_edges = all_edges_sorted[boundary_mask]
+
+    if len(boundary_edges) > 0:
+        a = boundary_edges[:, 0]
+        b = boundary_edges[:, 1]
+        a2 = a + n_verts
+        b2 = b + n_verts
+        # Cada aresta de contorno → 2 triangulos (quad da parede)
+        i_side = np.concatenate([a, b])
+        j_side = np.concatenate([b, b2])
+        k_side = np.concatenate([a2, a2])
+    else:
+        i_side = np.array([], dtype=int)
+        j_side = np.array([], dtype=int)
+        k_side = np.array([], dtype=int)
+
+    # ── Combinar todas as faces ──
+    i_final = np.concatenate([i_top, i_bot, i_side])
+    j_final = np.concatenate([j_top, j_bot, j_side])
+    k_final = np.concatenate([k_top, k_bot, k_side])
+
     return go.Mesh3d(
-        x=x_flat, y=y_flat, z=z_flat,
-        i=i_arr, j=j_arr, k=k_arr,
+        x=x_all, y=y_all, z=z_all,
+        i=i_final, j=j_final, k=k_final,
         color=cor,
         opacity=opacidade,
         name=nome,
         flatshading=False,
-        lighting=dict(ambient=0.6, diffuse=0.8, specular=0.2),
+        lighting=dict(ambient=0.5, diffuse=0.9, specular=0.3, roughness=0.5),
+        lightposition=dict(x=100, y=200, z=300),
         showlegend=True,
     )
 
 
-def criar_comparacao_3d(
+def criar_corte_aterro_3d(
     superficie: SuperficieTerreno,
     cota_projeto: float,
     remocao_vegetal: float = 0.30,
-    titulo: str = "Terreno vs Projeto",
+    titulo: str = "Corte e Aterro 3D",
     opacidade_projeto: float = 0.5,
 ) -> go.Figure:
-    """Cria visualizacao 3D comparando terreno com superficie de projeto.
+    """Cria visualizacao 3D de volumes solidos de corte e aterro.
 
-    Usa Mesh3d com cores distintas: vermelho para corte, azul para aterro.
-    Eixo Z relativo a cota do projeto (zero = cota, + aterro, - corte).
+    Cada regiao e um Mesh3d solido fechado (topo + base + paredes)
+    entre a superficie do terreno e o plano de projeto (z=0).
+    Vermelho = corte, Azul = aterro.
     """
     fig = go.Figure()
     ox, oy = _offset_xy(superficie)
@@ -322,53 +371,38 @@ def criar_comparacao_3d(
     nrows, ncols = z_terreno.shape
     z_flat = z_terreno.ravel().astype(float)
 
-    r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")
-    r = r.ravel()
-    c = c.ravel()
+    i_all, j_all, k_all = _triangular_grade(nrows, ncols)
 
-    v00 = r * ncols + c
-    v01 = r * ncols + c + 1
-    v10 = (r + 1) * ncols + c
-    v11 = (r + 1) * ncols + c + 1
+    z_cent = (z_flat[i_all] + z_flat[j_all] + z_flat[k_all]) / 3.0
+    mascara_aterro = z_cent >= 0
+    mascara_corte = z_cent < 0
 
-    # Centroide Z de cada triangulo (2 triangulos por celula)
-    z_cent_t1 = (z_flat[v00] + z_flat[v01] + z_flat[v10]) / 3.0
-    z_cent_t2 = (z_flat[v01] + z_flat[v11] + z_flat[v10]) / 3.0
-    z_centroid = np.concatenate([z_cent_t1, z_cent_t2])
-
-    mascara_aterro = z_centroid >= 0
-    mascara_corte = z_centroid < 0
-
-    # ── Mesh3d: Aterro (azul) ──
-    trace_aterro = _grid_to_mesh3d(
+    # ── Solido Aterro (azul) ──
+    trace_aterro = _criar_solido_mesh3d(
         mx, my, z_terreno, CORES["aterro"],
-        "Aterro (+)", opacidade=0.85,
-        mascara_face=mascara_aterro,
+        "Aterro (+)", mascara_aterro, opacidade=0.85,
     )
     if trace_aterro is not None:
         fig.add_trace(trace_aterro)
 
-    # ── Mesh3d: Corte (vermelho) ──
-    trace_corte = _grid_to_mesh3d(
+    # ── Solido Corte (vermelho) ──
+    trace_corte = _criar_solido_mesh3d(
         mx, my, z_terreno, CORES["corte"],
-        "Corte (\u2212)", opacidade=0.85,
-        mascara_face=mascara_corte,
+        "Corte (\u2212)", mascara_corte, opacidade=0.85,
     )
     if trace_corte is not None:
         fig.add_trace(trace_corte)
 
-    # ── Plano de projeto (z = 0) ──
+    # ── Plano de projeto (z = 0) transparente ──
     superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
     z_projeto = np.where(~np.isnan(superficie_proj), 0.0, np.nan)
 
     fig.add_trace(go.Surface(
-        x=mx,
-        y=my,
-        z=z_projeto,
-        colorscale=[[0, "rgba(99,102,241,0.5)"], [1, "rgba(99,102,241,0.5)"]],
+        x=mx, y=my, z=z_projeto,
+        colorscale=[[0, "rgba(180,180,180,0.3)"], [1, "rgba(180,180,180,0.3)"]],
         opacity=opacidade_projeto,
         showscale=False,
-        name="Projeto (cota = 0)",
+        name="Plataforma de projeto",
         connectgaps=True,
     ))
 

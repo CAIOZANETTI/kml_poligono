@@ -6,7 +6,7 @@ import pandas as pd
 from modulos.estado import pagina_requer_dados, obter_dados
 from modulos.visualizacao import (
     criar_mapa_contorno,
-    criar_superficie_3d, criar_comparacao_3d,
+    criar_superficie_3d, criar_corte_aterro_3d,
     criar_grafico_barras_volumes,
     criar_diagrama_bruckner as plotar_bruckner,
 )
@@ -40,7 +40,7 @@ for nome in nomes:
     figuras["3D Terreno - {}".format(nome)] = criar_superficie_3d(
         superficies[nome], grades[nome],
     )
-    figuras["3D Compara\u00e7\u00e3o - {}".format(nome)] = criar_comparacao_3d(
+    figuras["3D Corte Aterro - {}".format(nome)] = criar_corte_aterro_3d(
         superficies[nome], cotas[nome], remocao_vegetal,
     )
 
