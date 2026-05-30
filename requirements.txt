@@ -1,3 +1,4 @@
+# rebuild marker: 2026-05-30 (forca container limpo no Streamlit Cloud)
 streamlit>=1.35.0
 fastkml>=1.0.0
 shapely>=2.0.0
