@@ -37,10 +37,14 @@ with col2:
         "Exagero vertical", options=[1, 2, 3, 4, 5], value=1, key="exagero_3d",
     )
 
-st.caption(
-    "Talude **1:{:.1f}** (corte) e **1:{:.1f}** (aterro). O *daylight* (linha "
-    "pontilhada) é onde o talude morre no terreno natural extrapolado pela "
-    "inclinação local — pode invadir além da divisa.".format(r_corte, r_aterro)
+import math as _math
+_ang_c = _math.degrees(_math.atan(1.0 / r_corte))
+_ang_a = _math.degrees(_math.atan(1.0 / r_aterro))
+st.info(
+    "**Premissa de taludes** — Corte **1:{:g} ({:.1f}°)** · "
+    "Aterro **1:{:g} ({:.1f}°)**. O *daylight* (linha pontilhada) é onde o "
+    "talude morre no terreno natural extrapolado pela inclinação local — pode "
+    "invadir além da divisa.".format(r_corte, _ang_c, r_aterro, _ang_a)
 )
 
 # Motor: contorno (independe da cota) + resolucao dos taludes
