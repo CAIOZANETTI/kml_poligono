@@ -503,6 +503,136 @@ def criar_terreno_greide_3d(
     return fig
 
 
+_COR_TALUDE_CORTE = "#e07b54"   # laranja terroso (corte)
+_COR_TALUDE_ATERRO = "#5b9bd5"  # azul (aterro)
+
+
+def _mesh_strip(inner, outer, seg_mask, cor, nome, ox, oy):
+    """Tira triangulada (Mesh3d) entre o anel interno e o externo dos taludes."""
+    n = len(inner)
+    idx = np.where(seg_mask)[0]
+    if len(idx) == 0:
+        return None
+    vx, vy, vz = [], [], []
+    fi, fj, fk = [], [], []
+    for s in idx:
+        t = (s + 1) % n
+        quad = [inner[s], inner[t], outer[t], outer[s]]
+        base = len(vx)
+        for p in quad:
+            vx.append(p[0] - ox)
+            vy.append(p[1] - oy)
+            vz.append(p[2])
+        fi += [base, base]
+        fj += [base + 1, base + 2]
+        fk += [base + 2, base + 3]
+    return go.Mesh3d(
+        x=vx, y=vy, z=vz, i=fi, j=fj, k=fk,
+        color=cor, opacity=0.9, name=nome, flatshading=True, showlegend=True,
+        lighting=dict(ambient=0.75, diffuse=0.5, specular=0.05),
+        hoverinfo="name",
+    )
+
+
+def criar_greide_3d(
+    superficie: SuperficieTerreno,
+    grade: GradePoligono,
+    taludes,
+    cota_projeto: float = 0.0,
+    titulo: str = "Greide de Projeto",
+    exagero_vertical: int = 1,
+) -> go.Figure:
+    """Vista 3D com elementos SEPARADOS (ligaveis na legenda):
+
+    terreno natural, plato, talude de corte, talude de aterro, linha de
+    daylight (offset alem da divisa) e borda do plato. ``taludes`` e um
+    ``TaludesResolvidos`` de ``modulos.greide``.
+    """
+    fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
+
+    z_full = superficie.elevacao_malha.astype(float)
+    mx, my, z_eg, delta = _decimar(
+        superficie.malha_x - ox, superficie.malha_y - oy,
+        z_full, z_full - float(cota_projeto),
+    )
+    maxabs = float(np.nanmax(np.abs(delta))) or 1.0
+
+    # 1) Terreno natural (translucido, corte/aterro)
+    fig.add_trace(go.Surface(
+        x=mx, y=my, z=z_eg, surfacecolor=delta,
+        colorscale=_ESCALA_CORTE_ATERRO, cmin=-maxabs, cmid=0.0, cmax=maxabs,
+        opacity=0.45, name="Terreno natural",
+        colorbar=dict(title="Corte (+) / Aterro (−) (m)", thickness=14),
+        connectgaps=False, contours=_contorno_intersecao(z_eg, cota_projeto),
+        hoverinfo="x+y+z",
+    ))
+
+    # 2) Plato plano na cota, recortado ao lote
+    z_pad = np.where(~np.isnan(z_eg), float(cota_projeto), np.nan)
+    fig.add_trace(go.Surface(
+        x=mx, y=my, z=z_pad,
+        colorscale=[[0, _COR_GREIDE], [1, _COR_GREIDE]], showscale=False,
+        opacity=0.95, name="Platô", connectgaps=False, hoverinfo="name",
+        lighting=dict(ambient=0.85, diffuse=0.35, specular=0.05),
+    ))
+
+    # 3+4) Taludes de corte e de aterro (meshes separados)
+    inner, outer = taludes.inner, taludes.outer
+    dh = taludes.dh
+    n = len(inner)
+    dh_mid = 0.5 * (dh + np.roll(dh, -1))   # dh no meio de cada segmento
+    ativo = (taludes.is_corte | taludes.is_aterro)
+    seg_ativo = ativo & np.roll(ativo, -1)
+    seg_corte = seg_ativo & (dh_mid > 0)
+    seg_aterro = seg_ativo & (dh_mid < 0)
+
+    m_corte = _mesh_strip(inner, outer, seg_corte, _COR_TALUDE_CORTE,
+                          "Talude de corte", ox, oy)
+    m_aterro = _mesh_strip(inner, outer, seg_aterro, _COR_TALUDE_ATERRO,
+                           "Talude de aterro", ox, oy)
+    if m_corte is not None:
+        fig.add_trace(m_corte)
+    if m_aterro is not None:
+        fig.add_trace(m_aterro)
+
+    # 5) Linha de daylight (limite da terraplenagem, alem da divisa)
+    off = np.vstack([outer, outer[0:1]])
+    fig.add_trace(go.Scatter3d(
+        x=off[:, 0] - ox, y=off[:, 1] - oy, z=off[:, 2],
+        mode="lines", line=dict(color="#444", width=4, dash="dot"),
+        name="Linha de daylight (offset)",
+    ))
+
+    # 6) Borda do plato (na cota)
+    ring = np.vstack([inner, inner[0:1]])
+    fig.add_trace(go.Scatter3d(
+        x=ring[:, 0] - ox, y=ring[:, 1] - oy, z=ring[:, 2],
+        mode="lines", line=dict(color=CORES["borda"], width=3),
+        name="Borda do platô",
+    ))
+
+    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_eg)))
+
+    z_label = "Elevação (m)"
+    if exagero_vertical > 1:
+        z_label += " · exagero visual {}x".format(exagero_vertical)
+
+    fig.update_layout(
+        title=titulo,
+        scene=dict(
+            xaxis_title="Leste (m)", yaxis_title="Norte (m)", zaxis_title=z_label,
+            aspectmode="manual",
+            aspectratio=_aspecto_cena(mx, my, exagero_vertical),
+            camera=dict(eye=dict(x=1.6, y=-1.6, z=0.9)),
+        ),
+        template=_TEMPLATE, height=740,
+        margin=dict(l=40, r=20, b=40, t=70),
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.85)"),
+    )
+    return fig
+
+
 def _triangular_grade(nrows, ncols):
     """Retorna indices de triangulos (i, j, k) para grade nrows x ncols."""
     r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")
