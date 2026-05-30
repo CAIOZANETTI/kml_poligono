@@ -45,15 +45,28 @@ def _anotacao_norte_2d(fig: go.Figure) -> None:
 
 
 def _arrow_norte_3d(fig: go.Figure, mx, my, z_level: float) -> None:
-    """Adiciona seta de norte 3D (aponta para +Y) que gira junto com a cena."""
+    """Seta de norte 3D apontando para +Y (= norte geografico em UTM).
+
+    Desenhada com haste e ponta de flecha vermelhas para nao se confundir
+    com outras linhas da cena; gira junto com a camera.
+    """
     x0 = float(np.nanmax(mx))
     y_min, y_max = float(np.nanmin(my)), float(np.nanmax(my))
-    comprimento = 0.12 * (y_max - y_min)
+    L = 0.15 * (y_max - y_min)
+    y_tip = y_min + L
+    aw = 0.22 * L   # meia-largura da ponta
+    ah = 0.28 * L   # comprimento da ponta
+    # Haste + ponta (em "V") num unico traco, com None separando os segmentos
     fig.add_trace(go.Scatter3d(
-        x=[x0, x0], y=[y_min, y_min + comprimento], z=[z_level, z_level],
-        mode="lines+text", line=dict(color="#444", width=5),
-        text=["", "N"], textposition="top center",
-        textfont=dict(size=14, color="#444"),
+        x=[x0, x0, None, x0 - aw, x0, x0 + aw],
+        y=[y_min, y_tip, None, y_tip - ah, y_tip, y_tip - ah],
+        z=[z_level, z_level, None, z_level, z_level, z_level],
+        mode="lines", line=dict(color="#c0392b", width=6),
+        hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_trace(go.Scatter3d(
+        x=[x0], y=[y_tip + 0.18 * L], z=[z_level], mode="text",
+        text=["N"], textfont=dict(size=16, color="#c0392b"),
         hoverinfo="skip", showlegend=False,
     ))
 

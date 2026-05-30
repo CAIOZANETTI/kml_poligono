@@ -57,15 +57,30 @@ st.plotly_chart(fig, use_container_width=True)
 # ── Metricas: footprint e volumes (interno + talude) ──
 ci, ai = volumes_internos(superficie, cota, grade.espacamento, remocao)
 
+
+def _abrev(v: float) -> str:
+    """Abrevia em K/M sem casas decimais (ex.: 38916970 -> '39 M')."""
+    a = abs(v)
+    if a >= 1e6:
+        return "{:.0f} M".format(v / 1e6)
+    if a >= 1e3:
+        return "{:.0f} K".format(v / 1e3)
+    return "{:.0f}".format(v)
+
+
+corte_total = ci + tal.volume_corte
+aterro_total = ai + tal.volume_aterro
+saldo = corte_total - aterro_total
+
 m = st.columns(4)
-m[0].metric("Área invadida além da divisa", "{:,.0f} m²".format(tal.area_footprint))
-m[1].metric("Corte total (lote + talude)", "{:,.0f} m³".format(ci + tal.volume_corte),
+m[0].metric("Área invadida além da divisa", "{} m²".format(_abrev(tal.area_footprint)),
+            help="{:,.0f} m²".format(tal.area_footprint))
+m[1].metric("Corte total (lote + talude)", "{} m³".format(_abrev(corte_total)),
             help="Interno {:,.0f} + talude {:,.0f} m³".format(ci, tal.volume_corte))
-m[2].metric("Aterro total (lote + talude)", "{:,.0f} m³".format(ai + tal.volume_aterro),
+m[2].metric("Aterro total (lote + talude)", "{} m³".format(_abrev(aterro_total)),
             help="Interno {:,.0f} + talude {:,.0f} m³".format(ai, tal.volume_aterro))
-saldo = (ci + tal.volume_corte) - (ai + tal.volume_aterro)
-m[3].metric("Saldo (corte − aterro)", "{:,.0f} m³".format(saldo),
-            help="Positivo = sobra material; negativo = falta (importar).")
+m[3].metric("Saldo (corte − aterro)", "{} m³".format(_abrev(saldo)),
+            help="{:,.0f} m³ · positivo = sobra; negativo = falta (importar).".format(saldo))
 
 if tal.incompleto.any():
     st.warning(
