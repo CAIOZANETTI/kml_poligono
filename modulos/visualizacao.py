@@ -562,8 +562,7 @@ def criar_greide_3d(
     fig.add_trace(go.Surface(
         x=mx, y=my, z=z_eg, surfacecolor=delta,
         colorscale=_ESCALA_CORTE_ATERRO, cmin=-maxabs, cmid=0.0, cmax=maxabs,
-        opacity=0.45, name="Terreno natural",
-        colorbar=dict(title="Corte (+) / Aterro (−) (m)", thickness=14),
+        opacity=0.45, name="Terreno natural", showscale=False,
         connectgaps=False, contours=_contorno_intersecao(z_eg, cota_projeto),
         hoverinfo="x+y+z",
     ))
