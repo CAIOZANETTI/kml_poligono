@@ -13,9 +13,9 @@ nome = seletor_poligono("comp")
 
 cota_exib = dados["cotas"][nome]
 st.info(
-    "Volumes s\u00f3lidos relativos \u00e0 cota de projeto ({:.2f} m). "
-    "**\U0001f7e6 Azul** = aterro necess\u00e1rio \u2014 "
-    "**\U0001f7e5 Vermelho** = corte necess\u00e1rio.".format(cota_exib)
+    "Eleva\u00e7\u00e3o real com a plataforma de projeto ({:.2f} m) como plano cinza. "
+    "**\U0001f7e5 Vermelho (corte)** = terreno acima do plano \u2014 "
+    "**\U0001f7e6 Azul (aterro)** = vazio preenchido at\u00e9 o plano.".format(cota_exib)
 )
 
 opacidade_proj = st.slider(

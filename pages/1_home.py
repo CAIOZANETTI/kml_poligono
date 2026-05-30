@@ -15,6 +15,21 @@ from modulos.parametros import (
 st.title("Terraplenagem")
 st.caption("importe poligonos kml do google earth para calcular corte e aterro")
 
+
+def _fmt_area(m2: float) -> str:
+    """Area compacta em hectares."""
+    return "{:,.2f} ha".format(m2 / 10_000)
+
+
+def _fmt_vol(m3: float) -> str:
+    """Volume compacto: M m3 / mil m3 / m3 conforme a grandeza."""
+    a = abs(m3)
+    if a >= 1e6:
+        return "{:,.2f} M m³".format(m3 / 1e6)
+    if a >= 1e3:
+        return "{:,.1f} mil m³".format(m3 / 1e3)
+    return "{:,.0f} m³".format(m3)
+
 # ─── Upload ───
 st.subheader("Upload")
 arquivos_kml = st.file_uploader(
@@ -168,47 +183,37 @@ for poly in poligonos:
                 grade=grade,
             )
 
-        # Metricas com delta
-        cota_proj = cotas[nome]
+        # Metricas principais (4 por linha, formato compacto)
         res = resultados[nome]
+        balanco_poly = res.volume_corte_empolado - res.volume_aterro_compactado
 
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
-        c1.metric(
-            "Area",
-            "{:,.0f} m\u00b2".format(grade.area),
-            delta="{:,.0f} m perim.".format(grade.perimetro),
-            delta_color="off",
-        )
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Area", _fmt_area(grade.area))
         c2.metric(
-            "Elev. min",
-            "{:.2f} m".format(superficie.elevacao_min),
-            delta="{:+.2f} m".format(superficie.elevacao_min - cota_proj),
-            delta_color="inverse",
+            "Corte", _fmt_vol(res.volume_corte_empolado),
+            delta="empolado", delta_color="off",
         )
         c3.metric(
-            "Elev. max",
-            "{:.2f} m".format(superficie.elevacao_max),
-            delta="{:+.2f} m".format(superficie.elevacao_max - cota_proj),
-            delta_color="inverse",
+            "Aterro", _fmt_vol(res.volume_aterro_compactado),
+            delta="compactado", delta_color="off",
         )
         c4.metric(
-            "Corte",
-            "{:,.1f} m\u00b3".format(res.volume_corte_empolado),
-            delta="{:,.1f} m\u00b3 bruto".format(res.volume_corte_bruto),
-            delta_color="off",
+            "Balanco", _fmt_vol(balanco_poly),
+            delta="bota-fora" if balanco_poly > 0 else "solo importado",
+            delta_color="inverse",
         )
-        c5.metric(
-            "Aterro",
-            "{:,.1f} m\u00b3".format(res.volume_aterro_compactado),
-            delta="{:,.1f} m\u00b3 bruto".format(res.volume_aterro_bruto),
-            delta_color="off",
-        )
-        c6.metric(
-            "Remo\u00e7\u00e3o Vegetal",
-            "{:,.1f} m\u00b3".format(res.volume_remocao_vegetal),
-            delta="{:.2f} m espessura".format(res.remocao_vegetal),
-            delta_color="off",
-        )
+
+        # Detalhes secundarios fora do caminho principal
+        with st.expander("detalhes"):
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Perimetro", "{:,.0f} m".format(grade.perimetro))
+            d1.metric("Elev. min / max", "{:.1f} / {:.1f} m".format(
+                superficie.elevacao_min, superficie.elevacao_max,
+            ))
+            d2.metric("Corte bruto", _fmt_vol(res.volume_corte_bruto))
+            d2.metric("Aterro bruto", _fmt_vol(res.volume_aterro_bruto))
+            d3.metric("Remocao vegetal", _fmt_vol(res.volume_remocao_vegetal))
+            d3.metric("Espessura remocao", "{:.2f} m".format(res.remocao_vegetal))
 
 salvar_dados_sessao(
     poligonos, grades, superficies, resultados, cotas,
@@ -222,39 +227,21 @@ lista_res = list(resultados.values())
 
 total_corte = sum(r.volume_corte_empolado for r in lista_res)
 total_aterro = sum(r.volume_aterro_compactado for r in lista_res)
-total_bota = sum(r.volume_bota_fora for r in lista_res)
-total_solo = sum(r.volume_solo_importado for r in lista_res)
 total_remocao = sum(r.volume_remocao_vegetal for r in lista_res)
 balanco = total_corte - total_aterro
 
-mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+mc1, mc2, mc3, mc4 = st.columns(4)
 mc1.metric(
-    "Corte empolado",
-    "{:,.1f} m\u00b3".format(total_corte),
-    delta="{:,.1f} m\u00b3 balanco".format(balanco),
-    delta_color="off",
+    "Corte empolado", _fmt_vol(total_corte),
+    delta="{} poligonos".format(len(lista_res)), delta_color="off",
 )
-mc2.metric(
-    "Aterro compactado",
-    "{:,.1f} m\u00b3".format(total_aterro),
-    delta="{} poligonos".format(len(lista_res)),
-    delta_color="off",
-)
+mc2.metric("Aterro compactado", _fmt_vol(total_aterro))
 mc3.metric(
-    "Bota-fora",
-    "{:,.1f} m\u00b3".format(total_bota),
-    delta="excesso" if total_bota > 0 else "zero",
-    delta_color="inverse" if total_bota > 0 else "off",
+    "Balanco", _fmt_vol(balanco),
+    delta="bota-fora" if balanco > 0 else ("solo importado" if balanco < 0 else "equilibrio"),
+    delta_color="inverse",
 )
 mc4.metric(
-    "Solo importado",
-    "{:,.1f} m\u00b3".format(total_solo),
-    delta="deficit" if total_solo > 0 else "zero",
-    delta_color="inverse" if total_solo > 0 else "off",
-)
-mc5.metric(
-    "Remo\u00e7\u00e3o Vegetal",
-    "{:,.1f} m\u00b3".format(total_remocao),
-    delta="bota-fora direto",
-    delta_color="off",
+    "Remocao vegetal", _fmt_vol(total_remocao),
+    delta="bota-fora direto", delta_color="off",
 )

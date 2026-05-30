@@ -38,7 +38,7 @@ for nome in nomes:
         cota_projeto=cotas[nome],
     )
     figuras["3D Terreno - {}".format(nome)] = criar_superficie_3d(
-        superficies[nome], grades[nome],
+        superficies[nome], grades[nome], cota_referencia=cotas[nome],
     )
     figuras["3D Corte Aterro - {}".format(nome)] = criar_corte_aterro_3d(
         superficies[nome], cotas[nome], remocao_vegetal,
