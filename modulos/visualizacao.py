@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Optional
 
-from modulos.terreno import SuperficieTerreno, gerar_superficie_projeto
+from modulos.terreno import SuperficieTerreno
 from modulos.volumes import ResultadoVolume
 from modulos.bruckner import ResultadoBruckner
 from modulos.geometria import GradePoligono
@@ -114,11 +114,43 @@ def criar_mapa_contorno(
 
 # ── Helpers 3D ──
 
-def _exagero(z: np.ndarray, z_ref: float, fator: int) -> np.ndarray:
-    """Exagera o relevo em torno de z_ref, preservando a cota de referencia."""
-    if fator > 1:
-        return (z - z_ref) * fator + z_ref
-    return z
+def _passo_decimacao(n: int, alvo: int = 140) -> int:
+    """Passo de stride para limitar a malha a ~alvo celulas por eixo."""
+    return max(1, int(np.ceil(n / alvo)))
+
+
+def _decimar(*arrays: np.ndarray, alvo: int = 140):
+    """Reduz malhas 2D por stride (NumPy) preservando regularidade."""
+    base = arrays[0]
+    sl = (
+        slice(None, None, _passo_decimacao(base.shape[0], alvo)),
+        slice(None, None, _passo_decimacao(base.shape[1], alvo)),
+    )
+    return [None if a is None else a[sl] for a in arrays]
+
+
+def _plano_datum(mx: np.ndarray, my: np.ndarray, cota: float, opacidade: float):
+    """Plano de projeto leve: um quad 2x2 sobre o bounding box, na cota."""
+    x0, x1 = float(np.nanmin(mx)), float(np.nanmax(mx))
+    y0, y1 = float(np.nanmin(my)), float(np.nanmax(my))
+    return go.Surface(
+        x=np.array([[x0, x1], [x0, x1]]),
+        y=np.array([[y0, y0], [y1, y1]]),
+        z=np.full((2, 2), float(cota)),
+        colorscale=[[0, "rgba(120,120,120,1)"], [1, "rgba(120,120,120,1)"]],
+        opacity=opacidade,
+        showscale=False,
+        name="Plataforma de projeto",
+        hoverinfo="name",
+    )
+
+
+def _aspecto_cena(mx: np.ndarray, my: np.ndarray, exagero_vertical: int) -> dict:
+    """Aspecto manual: horizontal em escala real, vertical exagerado p/ visual."""
+    dx = float(np.nanmax(mx) - np.nanmin(mx)) or 1.0
+    dy = float(np.nanmax(my) - np.nanmin(my)) or 1.0
+    dmax = max(dx, dy)
+    return dict(x=dx / dmax, y=dy / dmax, z=0.18 * float(exagero_vertical))
 
 
 def _criar_terreno_3d(
@@ -131,32 +163,36 @@ def _criar_terreno_3d(
 ) -> go.Figure:
     """Terreno 3D em elevacao real, colorido por corte/aterro relativo a cota.
 
-    A geometria sempre mostra o relevo verdadeiro. A plataforma de projeto
-    e um plano horizontal independente (nao deformado) na cota desejada.
+    Mostra o relevo verdadeiro (coordenadas nao distorcidas). O exagero
+    vertical e apenas visual (aspecto da cena). A plataforma de projeto e
+    um plano horizontal independente na cota desejada. A malha e decimada
+    para renderizar rapido em grades densas.
     """
     fig = go.Figure()
     ox, oy = _offset_xy(superficie)
 
-    elev = superficie.elevacao_malha
-    z_ref = float(np.nanmean(elev))
-    z_terreno = _exagero(elev, z_ref, exagero_vertical)
+    mx_full = superficie.malha_x - ox
+    my_full = superficie.malha_y - oy
+    z_full = superficie.elevacao_malha
 
-    z_label = "Elevação (m)"
-    if exagero_vertical > 1:
-        z_label += " (exagero {}x)".format(exagero_vertical)
+    if cota_referencia is not None:
+        delta_full = z_full - cota_referencia  # >0 corte, <0 aterro
+    else:
+        delta_full = None
+
+    mx, my, z_terreno, delta = _decimar(mx_full, my_full, z_full, delta_full)
 
     # Cor por corte (terreno acima do projeto, +) / aterro (abaixo, -)
     if cota_referencia is not None:
-        delta = elev - cota_referencia  # >0 corte (vermelho), <0 aterro (azul)
         maxabs = float(np.nanmax(np.abs(delta))) or 1.0
         cor_kwargs = dict(
             surfacecolor=delta,
             colorscale=_ESCALA_CORTE_ATERRO,
             cmin=-maxabs, cmid=0.0, cmax=maxabs,
-            colorbar=dict(title="Corte (+) / Aterro (−) (m)"),
+            colorbar=dict(title="Corte (+) / Aterro (−) (m)", thickness=14),
         )
     else:
-        cor_kwargs = dict(colorscale="Earth", colorbar=dict(title="Elev. (m)"))
+        cor_kwargs = dict(colorscale="Earth", colorbar=dict(title="Elev. (m)", thickness=14))
 
     contour_kwargs = {}
     if contornos:
@@ -165,50 +201,35 @@ def _criar_terreno_3d(
         ))
 
     fig.add_trace(go.Surface(
-        x=superficie.malha_x - ox,
-        y=superficie.malha_y - oy,
-        z=z_terreno,
+        x=mx, y=my, z=z_terreno,
         name="Terreno",
         connectgaps=True,
+        lighting=dict(ambient=0.65, diffuse=0.85, roughness=0.6, specular=0.15),
         **cor_kwargs,
         **contour_kwargs,
     ))
 
-    # Plataforma de projeto: plano horizontal livre na cota desejada
+    # Plataforma de projeto: plano horizontal leve (quad 2x2) na cota
     if cota_referencia is not None:
-        z_plano = _exagero(
-            np.full_like(elev, cota_referencia), z_ref, exagero_vertical,
-        )
-        z_plano = np.where(~np.isnan(elev), z_plano, np.nan)
-        fig.add_trace(go.Surface(
-            x=superficie.malha_x - ox,
-            y=superficie.malha_y - oy,
-            z=z_plano,
-            colorscale=[[0, "rgba(120,120,120,0.35)"], [1, "rgba(120,120,120,0.35)"]],
-            opacity=0.45,
-            showscale=False,
-            name="Plataforma de projeto ({:.2f} m)".format(cota_referencia),
-            connectgaps=True,
-            hoverinfo="name",
-        ))
+        fig.add_trace(_plano_datum(mx, my, cota_referencia, opacidade=0.35))
 
     if grade is not None:
         borda = grade.pontos_borda
         borda_fechada = np.vstack([borda, borda[0:1]])
-        borda_z = _exagero(borda_fechada[:, 2], z_ref, exagero_vertical)
         fig.add_trace(go.Scatter3d(
             x=borda_fechada[:, 0] - ox,
             y=borda_fechada[:, 1] - oy,
-            z=borda_z,
+            z=borda_fechada[:, 2],
             mode="lines",
             line=dict(color=CORES["borda"], width=3),
             name="Borda",
         ))
 
-    _arrow_norte_3d(
-        fig, superficie.malha_x - ox, superficie.malha_y - oy,
-        float(np.nanmin(z_terreno)),
-    )
+    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_terreno)))
+
+    z_label = "Elevação (m)"
+    if exagero_vertical > 1:
+        z_label += " · exagero visual {}x".format(exagero_vertical)
 
     fig.update_layout(
         title=titulo,
@@ -216,11 +237,13 @@ def _criar_terreno_3d(
             xaxis_title="Leste (m)",
             yaxis_title="Norte (m)",
             zaxis_title=z_label,
-            aspectmode="data",
+            aspectmode="manual",
+            aspectratio=_aspecto_cena(mx, my, exagero_vertical),
+            camera=dict(eye=dict(x=1.5, y=-1.5, z=0.85)),
         ),
         template=_TEMPLATE,
         height=700,
-        margin=dict(l=65, r=50, b=65, t=90),
+        margin=dict(l=40, r=20, b=40, t=70),
         legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
     )
     return fig
@@ -380,9 +403,12 @@ def criar_corte_aterro_3d(
     fig = go.Figure()
     ox, oy = _offset_xy(superficie)
 
-    mx = superficie.malha_x - ox
-    my = superficie.malha_y - oy
-    z_terreno = superficie.elevacao_malha.astype(float)  # elevacao real
+    # Decima a malha (NumPy) para sólidos leves; volume é calculado à parte
+    mx, my, z_terreno = _decimar(
+        superficie.malha_x - ox,
+        superficie.malha_y - oy,
+        superficie.elevacao_malha.astype(float),
+    )
 
     # ── Classificar cada face como corte ou aterro ──
     nrows, ncols = z_terreno.shape
@@ -410,17 +436,8 @@ def criar_corte_aterro_3d(
     if trace_corte is not None:
         fig.add_trace(trace_corte)
 
-    # ── Plataforma de projeto: plano horizontal na cota ──
-    superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
-
-    fig.add_trace(go.Surface(
-        x=mx, y=my, z=superficie_proj,
-        colorscale=[[0, "rgba(180,180,180,0.3)"], [1, "rgba(180,180,180,0.3)"]],
-        opacity=opacidade_projeto,
-        showscale=False,
-        name="Plataforma de projeto",
-        connectgaps=True,
-    ))
+    # ── Plataforma de projeto: plano horizontal leve (quad 2x2) na cota ──
+    fig.add_trace(_plano_datum(mx, my, cota_projeto, opacidade=opacidade_projeto))
 
     _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_terreno)))
 
@@ -430,10 +447,13 @@ def criar_corte_aterro_3d(
             xaxis_title="Leste (m)",
             yaxis_title="Norte (m)",
             zaxis_title="Eleva\u00e7\u00e3o (m)",
-            aspectmode="data",
+            aspectmode="manual",
+            aspectratio=_aspecto_cena(mx, my, 1),
+            camera=dict(eye=dict(x=1.5, y=-1.5, z=0.85)),
         ),
         template=_TEMPLATE,
         height=700,
+        margin=dict(l=40, r=20, b=40, t=70),
         legend=dict(
             x=0.01, y=0.99,
             bgcolor="rgba(255,255,255,0.8)",

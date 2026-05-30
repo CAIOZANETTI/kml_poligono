@@ -2,7 +2,7 @@
 
 import streamlit as st
 from modulos.estado import pagina_requer_dados, obter_dados, seletor_poligono
-from modulos.visualizacao import criar_superficie_3d_contornos
+from modulos.visualizacao import criar_superficie_3d
 
 pagina_requer_dados()
 dados = obter_dados()
@@ -20,7 +20,7 @@ exagero = st.select_slider(
 
 cota_ref = dados["cotas"].get(nome)
 
-fig = criar_superficie_3d_contornos(
+fig = criar_superficie_3d(
     dados["superficies"][nome],
     dados["grades"][nome],
     titulo="Terreno 3D - {}".format(nome),
