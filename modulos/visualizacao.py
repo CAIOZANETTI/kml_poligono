@@ -290,6 +290,80 @@ def criar_superficie_3d_contornos(
     )
 
 
+def criar_plataforma_projeto_3d(
+    superficie: SuperficieTerreno,
+    grade: Optional[GradePoligono] = None,
+    cota_projeto: float = 0.0,
+    titulo: str = "Plataforma de Projeto",
+    exagero_vertical: int = 1,
+) -> go.Figure:
+    """Mostra o ESTADO DESEJADO: a plataforma plana (terreno terraplanado)
+    na cota de projeto, com o terreno natural por tras como referencia.
+    """
+    fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
+
+    mx, my, z_terreno = _decimar(
+        superficie.malha_x - ox,
+        superficie.malha_y - oy,
+        superficie.elevacao_malha.astype(float),
+    )
+
+    # Terreno natural como referencia translucida (fantasma)
+    fig.add_trace(go.Surface(
+        x=mx, y=my, z=z_terreno,
+        colorscale=[[0, "rgba(120,120,120,1)"], [1, "rgba(120,120,120,1)"]],
+        opacity=0.18, showscale=False, name="Terreno natural",
+        connectgaps=False, hoverinfo="name",
+        lighting=dict(ambient=1.0, diffuse=0.0, specular=0.0),
+    ))
+
+    # Plataforma plana desejada: superficie solida na cota, recortada ao lote
+    z_plat = np.where(~np.isnan(z_terreno), float(cota_projeto), np.nan)
+    fig.add_trace(go.Surface(
+        x=mx, y=my, z=z_plat,
+        colorscale=[[0, CORES["accent"]], [1, CORES["accent"]]],
+        opacity=0.95, showscale=False, name="Plataforma de projeto",
+        connectgaps=False, hoverinfo="name",
+        lighting=dict(ambient=0.8, diffuse=0.5, specular=0.1),
+    ))
+
+    if grade is not None:
+        borda = grade.pontos_borda
+        borda_fechada = np.vstack([borda, borda[0:1]])
+        fig.add_trace(go.Scatter3d(
+            x=borda_fechada[:, 0] - ox,
+            y=borda_fechada[:, 1] - oy,
+            z=np.full(len(borda_fechada), float(cota_projeto)),
+            mode="lines",
+            line=dict(color=CORES["borda"], width=3),
+            name="Contorno do lote",
+        ))
+
+    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_terreno)))
+
+    z_label = "Elevação (m)"
+    if exagero_vertical > 1:
+        z_label += " · exagero visual {}x".format(exagero_vertical)
+
+    fig.update_layout(
+        title=titulo,
+        scene=dict(
+            xaxis_title="Leste (m)",
+            yaxis_title="Norte (m)",
+            zaxis_title=z_label,
+            aspectmode="manual",
+            aspectratio=_aspecto_cena(mx, my, exagero_vertical),
+            camera=dict(eye=dict(x=1.5, y=-1.5, z=0.85)),
+        ),
+        template=_TEMPLATE,
+        height=700,
+        margin=dict(l=40, r=20, b=40, t=70),
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
+    )
+    return fig
+
+
 def _triangular_grade(nrows, ncols):
     """Retorna indices de triangulos (i, j, k) para grade nrows x ncols."""
     r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")
