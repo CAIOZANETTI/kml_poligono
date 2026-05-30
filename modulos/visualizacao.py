@@ -364,6 +364,145 @@ def criar_plataforma_projeto_3d(
     return fig
 
 
+_COR_GREIDE = "#9aa3ab"  # cinza concreto do greide acabado
+
+
+def _skirt_taludes(grade, cota: float, ox: float, oy: float,
+                   ratio_corte: float, ratio_aterro: float):
+    """Saias de talude do greide: liga a aresta do plato (na cota) ao terreno.
+
+    Para cada vertice da borda, projeta um ponto de offset (daylight) para
+    fora do lote, a uma distancia = altura * (H/V), na elevacao natural.
+    Constroi uma tira (Mesh3d) entre o anel interno (cota) e o externo.
+    """
+    borda = grade.pontos_borda
+    if borda is None or len(borda) < 3:
+        return None
+
+    xy = borda[:, :2].astype(float)
+    ez = borda[:, 2].astype(float)
+    centro = xy.mean(axis=0)
+    fora = xy - centro
+    norma = np.linalg.norm(fora, axis=1, keepdims=True)
+    norma[norma == 0] = 1.0
+    fora = fora / norma
+
+    dh = ez - cota                                    # >0 corte, <0 aterro
+    run = np.where(dh > 0, dh * ratio_corte, -dh * ratio_aterro)
+
+    inner = np.column_stack([xy[:, 0] - ox, xy[:, 1] - oy, np.full(len(xy), float(cota))])
+    outer = np.column_stack([xy[:, 0] - ox + fora[:, 0] * run,
+                             xy[:, 1] - oy + fora[:, 1] * run, ez])
+
+    n = len(inner)
+    verts = np.vstack([inner, outer])
+    i_idx, j_idx, k_idx = [], [], []
+    for s in range(n):
+        a, b = s, (s + 1) % n
+        c, d = b + n, s + n
+        i_idx += [a, a]
+        j_idx += [b, c]
+        k_idx += [c, d]
+
+    return go.Mesh3d(
+        x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+        i=i_idx, j=j_idx, k=k_idx,
+        color=_COR_GREIDE, opacity=0.95, name="Taludes",
+        flatshading=True, showlegend=True,
+        lighting=dict(ambient=0.7, diffuse=0.5, specular=0.05),
+    )
+
+
+def criar_terreno_greide_3d(
+    superficie: SuperficieTerreno,
+    grade: Optional[GradePoligono] = None,
+    cota_projeto: float = 0.0,
+    talude_corte_h: float = 1.0,
+    talude_corte_v: float = 1.0,
+    talude_aterro_h: float = 2.0,
+    talude_aterro_v: float = 1.0,
+    titulo: str = "Terreno e Greide de Projeto",
+    exagero_vertical: int = 1,
+) -> go.Figure:
+    """Vista unificada: Terreno Existente (EG) x Greide de Projeto (FG).
+
+    - EG: terreno natural translucido, colorido por corte/aterro, com a
+      linha de interseccao na cota.
+    - FG: o greide solido = plato plano na cota + saias de talude que
+      amarram no terreno natural nas bordas.
+    """
+    fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
+
+    z_full = superficie.elevacao_malha.astype(float)
+    mx, my, z_eg, delta = _decimar(
+        superficie.malha_x - ox, superficie.malha_y - oy,
+        z_full, z_full - float(cota_projeto),
+    )
+    maxabs = float(np.nanmax(np.abs(delta))) or 1.0
+
+    # ── EG: terreno existente (translucido, corte/aterro) ──
+    fig.add_trace(go.Surface(
+        x=mx, y=my, z=z_eg, surfacecolor=delta,
+        colorscale=_ESCALA_CORTE_ATERRO, cmin=-maxabs, cmid=0.0, cmax=maxabs,
+        opacity=0.5, name="Terreno existente",
+        colorbar=dict(title="Corte (+) / Aterro (−) (m)", thickness=14),
+        connectgaps=False,
+        contours=_contorno_intersecao(z_eg, cota_projeto),
+        hoverinfo="x+y+z",
+    ))
+
+    # ── FG: plato plano (greide) na cota, recortado ao lote ──
+    z_pad = np.where(~np.isnan(z_eg), float(cota_projeto), np.nan)
+    fig.add_trace(go.Surface(
+        x=mx, y=my, z=z_pad,
+        colorscale=[[0, _COR_GREIDE], [1, _COR_GREIDE]], showscale=False,
+        opacity=0.95, name="Greide (plato)", connectgaps=False, hoverinfo="name",
+        lighting=dict(ambient=0.8, diffuse=0.4, specular=0.05),
+    ))
+
+    # ── FG: saias de talude + borda do plato ──
+    if grade is not None:
+        skirt = _skirt_taludes(
+            grade, float(cota_projeto), ox, oy,
+            talude_corte_h / talude_corte_v,
+            talude_aterro_h / talude_aterro_v,
+        )
+        if skirt is not None:
+            fig.add_trace(skirt)
+        borda = grade.pontos_borda
+        bf = np.vstack([borda, borda[0:1]])
+        fig.add_trace(go.Scatter3d(
+            x=bf[:, 0] - ox, y=bf[:, 1] - oy,
+            z=np.full(len(bf), float(cota_projeto)),
+            mode="lines", line=dict(color=CORES["borda"], width=3),
+            name="Borda do plato",
+        ))
+
+    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_eg)))
+
+    z_label = "Elevação (m)"
+    if exagero_vertical > 1:
+        z_label += " · exagero visual {}x".format(exagero_vertical)
+
+    fig.update_layout(
+        title=titulo,
+        scene=dict(
+            xaxis_title="Leste (m)",
+            yaxis_title="Norte (m)",
+            zaxis_title=z_label,
+            aspectmode="manual",
+            aspectratio=_aspecto_cena(mx, my, exagero_vertical),
+            camera=dict(eye=dict(x=1.5, y=-1.5, z=0.85)),
+        ),
+        template=_TEMPLATE,
+        height=720,
+        margin=dict(l=40, r=20, b=40, t=70),
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
+    )
+    return fig
+
+
 def _triangular_grade(nrows, ncols):
     """Retorna indices de triangulos (i, j, k) para grade nrows x ncols."""
     r, c = np.meshgrid(np.arange(nrows - 1), np.arange(ncols - 1), indexing="ij")

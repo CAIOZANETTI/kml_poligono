@@ -1,8 +1,8 @@
-"""Pagina: Terreno 3D - natural (primitivo) e plataforma desejada."""
+"""Pagina: Terreno 3D - Terreno Existente x Greide de Projeto (vista unificada)."""
 
 import streamlit as st
 from modulos.estado import pagina_requer_dados, obter_dados, seletor_poligono
-from modulos.visualizacao import criar_superficie_3d, criar_plataforma_projeto_3d
+from modulos.visualizacao import criar_terreno_greide_3d
 
 pagina_requer_dados()
 dados = obter_dados()
@@ -21,28 +21,23 @@ exagero = st.select_slider(
 cota_ref = dados["cotas"].get(nome)
 superficie = dados["superficies"][nome]
 grade = dados["grades"][nome]
+p = dados["parametros"]
 
-# ── 1. Terreno natural (primitivo) ──
-st.markdown("##### 1. Terreno natural (primitivo)")
-st.caption("O relevo existente, como veio do levantamento — colorido por elevacao.")
-fig_natural = criar_superficie_3d(
-    superficie, grade,
-    titulo="Terreno natural - {}".format(nome),
-    exagero_vertical=exagero,
-    cota_referencia=None,
-)
-st.plotly_chart(fig_natural, use_container_width=True)
-
-# ── 2. Plataforma de projeto (terreno plano desejado) ──
-st.markdown("##### 2. Plataforma de projeto (terreno plano desejado)")
 st.caption(
-    "O estado desejado: a superficie plana na cota de projeto ({:.2f} m). "
-    "O terreno natural aparece atras, translucido, como referencia.".format(cota_ref)
+    "**Terreno existente** (translucido, vermelho = corte / azul = aterro) e o "
+    "**greide de projeto** (cinza solido = plato na cota {:.2f} m + taludes que "
+    "amarram no terreno). A linha onde o terreno cruza a cota e a divisa "
+    "corte/aterro.".format(cota_ref)
 )
-fig_plataforma = criar_plataforma_projeto_3d(
+
+fig = criar_terreno_greide_3d(
     superficie, grade,
     cota_projeto=cota_ref,
-    titulo="Plataforma de projeto - {}".format(nome),
+    talude_corte_h=p.talude_corte_h,
+    talude_corte_v=p.talude_corte_v,
+    talude_aterro_h=p.talude_aterro_h,
+    talude_aterro_v=p.talude_aterro_v,
+    titulo="Terreno e greide - {}".format(nome),
     exagero_vertical=exagero,
 )
-st.plotly_chart(fig_plataforma, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
