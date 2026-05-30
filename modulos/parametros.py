@@ -6,6 +6,7 @@ Referencia:
     - DER/PR Manual de Execucao de Servicos Rodoviarios (2023)
 """
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict
@@ -49,6 +50,20 @@ class ParametrosPadrao:
     talude_aterro_h: float = 2.0          # componente horizontal (1:2)
     talude_aterro_v: float = 1.0          # componente vertical
     categoria_solo: CategoriaSolo = CategoriaSolo.PRIMEIRA
+
+
+def descricao_talude(razao_h: float, razao_v: float) -> str:
+    """Retorna '1:N (ângulo°)' a partir das componentes H e V (convenção 1:N)."""
+    ratio = razao_h / razao_v
+    ang = math.degrees(math.atan(razao_v / razao_h))
+    return "1:{:g} ({:.1f}°)".format(ratio, ang)
+
+
+def premissa_taludes_md(parametros: "ParametrosPadrao") -> str:
+    """Texto markdown da premissa de taludes (corte e aterro), reutilizável."""
+    corte = descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)
+    aterro = descricao_talude(parametros.talude_aterro_h, parametros.talude_aterro_v)
+    return "**Premissa de taludes** — Corte **{}** · Aterro **{}**".format(corte, aterro)
 
 
 NORMAS_REFERENCIA = {

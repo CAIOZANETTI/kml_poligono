@@ -7,12 +7,17 @@ from modulos.estado import pagina_requer_dados, obter_dados, seletor_poligono
 from modulos.volumes import calcular_volumes_por_faixas, extrair_perfil_faixa
 from modulos.bruckner import construir_diagrama_bruckner, identificar_zonas_transporte
 from modulos.visualizacao import criar_diagrama_bruckner as plotar_bruckner, criar_perfil_faixa
-from modulos.parametros import obter_fator_empolamento, obter_fator_homogeneizacao
+from modulos.parametros import (
+    obter_fator_empolamento, obter_fator_homogeneizacao, premissa_taludes_md,
+)
 
 pagina_requer_dados()
 dados = obter_dados()
 
 st.subheader("Diagrama de Bruckner")
+
+if dados.get("parametros") is not None:
+    st.info(premissa_taludes_md(dados["parametros"]))
 
 nome = seletor_poligono("bruckner")
 

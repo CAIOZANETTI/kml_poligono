@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 from modulos.volumes import ResultadoVolume
 from modulos.parametros import (
     ParametrosPadrao, NORMAS_REFERENCIA, NOMES_CATEGORIA, FATORES_DNIT,
-    _resolver_categoria,
+    _resolver_categoria, descricao_talude,
 )
 
 
@@ -228,6 +228,8 @@ def _gerar_memoria_de_calculo(
         v_aterro_bruto_plataforma = r.volume_aterro_bruto - r.volume_talude_aterro
         razao_corte = parametros.talude_corte_h / parametros.talude_corte_v
         razao_aterro = parametros.talude_aterro_h / parametros.talude_aterro_v
+        desc_corte = descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)
+        desc_aterro = descricao_talude(parametros.talude_aterro_h, parametros.talude_aterro_v)
 
         # Pre-computa strings condicionais (backslash nao permitido em f-expr)
         if r.volume_bota_fora > 0:
@@ -292,8 +294,8 @@ def _gerar_memoria_de_calculo(
     <p><strong>4. Volumes de Talude (bordas do pol\u00edgono)</strong></p>
     <div style="background:var(--cinza-bg);padding:10px 14px;border-radius:4px;font-family:monospace;font-size:11px;margin:8px 0;">
         V<sub>talude</sub> = \u03a3 (0,5 \u00d7 h\u1d62\u00b2 \u00d7 (H/V) \u00d7 espa\u00e7amento)<br><br>
-        Talude de corte: &nbsp;H:V = {parametros.talude_corte_h:.0f}:{parametros.talude_corte_v:.0f} \u2192 raz\u00e3o = {razao_corte:.1f}<br>
-        Talude de aterro: H:V = {parametros.talude_aterro_h:.0f}:{parametros.talude_aterro_v:.0f} \u2192 raz\u00e3o = {razao_aterro:.1f}
+        Talude de corte: &nbsp;{desc_corte} \u2192 raz\u00e3o H/V = {razao_corte:.1f}<br>
+        Talude de aterro: {desc_aterro} \u2192 raz\u00e3o H/V = {razao_aterro:.1f}
     </div>
     <table>
         <thead><tr><th>Talude</th><th>Volume</th></tr></thead>
@@ -458,8 +460,8 @@ def gerar_relatorio_gerencial(
             <tr><td>Fator Empolamento</td><td>{fator_emp}</td><td>{norma_cortes}</td></tr>
             <tr><td>Fator Homogeneiza\u00e7\u00e3o</td><td>{fator_hom}</td><td>{norma_aterros}</td></tr>
             <tr><td>Remo\u00e7\u00e3o Vegetal</td><td>{parametros.remocao_vegetal:.2f} m</td><td>Premissa</td></tr>
-            <tr><td>Talude de Corte</td><td>{parametros.talude_corte_h:.0f}:{parametros.talude_corte_v:.0f}</td><td>Premissa</td></tr>
-            <tr><td>Talude de Aterro</td><td>{parametros.talude_aterro_h:.0f}:{parametros.talude_aterro_v:.0f}</td><td>Premissa</td></tr>
+            <tr><td>Talude de Corte</td><td>{descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)}</td><td>Premissa</td></tr>
+            <tr><td>Talude de Aterro</td><td>{descricao_talude(parametros.talude_aterro_h, parametros.talude_aterro_v)}</td><td>Premissa</td></tr>
             <tr><td>Espa\u00e7amento da Grade</td><td>{parametros.espacamento_grade:.1f} m</td><td>Premissa</td></tr>
         </tbody>
     </table>
@@ -555,8 +557,8 @@ def gerar_relatorio_analitico(
             <tr><td>Empolamento</td><td>{fator_emp}</td><td>{norma_cortes}</td></tr>
             <tr><td>Homogeneiza\u00e7\u00e3o</td><td>{fator_hom}</td><td>{norma_aterros}</td></tr>
             <tr><td>Remo\u00e7\u00e3o Vegetal</td><td>{parametros.remocao_vegetal:.2f} m</td><td>-</td></tr>
-            <tr><td>Talude Corte</td><td>{parametros.talude_corte_h:.0f}:{parametros.talude_corte_v:.0f}</td><td>-</td></tr>
-            <tr><td>Talude Aterro</td><td>{parametros.talude_aterro_h:.0f}:{parametros.talude_aterro_v:.0f}</td><td>-</td></tr>
+            <tr><td>Talude Corte</td><td>{descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)}</td><td>-</td></tr>
+            <tr><td>Talude Aterro</td><td>{descricao_talude(parametros.talude_aterro_h, parametros.talude_aterro_v)}</td><td>-</td></tr>
         </tbody>
     </table>
 </div>"""

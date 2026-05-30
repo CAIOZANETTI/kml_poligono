@@ -2,12 +2,17 @@
 
 import streamlit as st
 from modulos.estado import pagina_requer_dados, obter_dados, seletor_poligono
-from modulos.parametros import NOMES_CATEGORIA, FATORES_DNIT, _resolver_categoria
+from modulos.parametros import (
+    NOMES_CATEGORIA, FATORES_DNIT, _resolver_categoria, premissa_taludes_md,
+)
 
 pagina_requer_dados()
 dados = obter_dados()
 
 st.subheader("Memoria de Calculo")
+
+if dados.get("parametros") is not None:
+    st.info(premissa_taludes_md(dados["parametros"]))
 
 nome = seletor_poligono("vol")
 r = dados["resultados"][nome]
