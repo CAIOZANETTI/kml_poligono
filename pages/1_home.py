@@ -73,21 +73,46 @@ with col_info:
     )
 
 st.subheader("Taludes")
+st.caption(
+    "Inclina\u00e7\u00e3o na conven\u00e7\u00e3o **1:N** (1 vertical para N horizontal). "
+    "A vertical \u00e9 fixa em 1 \u2014 escolha o padr\u00e3o ou personalize."
+)
+
+
+def _rotulo_talude(razao: float) -> str:
+    """Rotulo '1:N (\u00e2ngulo\u00b0)' a partir da razao H/V (V=1)."""
+    ang = math.degrees(math.atan(1.0 / razao))
+    n = ("%g" % razao).replace(".", ",")
+    return "1:{} ({:.1f}\u00b0)".format(n, ang)
+
+
+_PRESETS_CORTE = [0.5, 1.0, 1.5, 2.0]    # taludes mais ingremes (corte)
+_PRESETS_ATERRO = [1.5, 2.0, 2.5, 3.0]   # taludes mais suaves (aterro)
+_PERSONALIZADO = "Personalizado\u2026"
+
 col_tc, col_ta = st.columns(2)
 with col_tc:
-    talude_corte_h = st.number_input("Talude corte \u2014 H (horizontal)", value=1.0, min_value=0.1, step=0.5)
-    talude_corte_v = st.number_input("Talude corte \u2014 V (vertical)", value=1.0, min_value=0.1, step=0.5)
-    ang_corte = math.degrees(math.atan(talude_corte_v / talude_corte_h))
-    st.caption("Inclina\u00e7\u00e3o: 1:{:.0f} (H:V) \u00b7 {:.1f}\u00b0 com a horizontal".format(
-        talude_corte_h / talude_corte_v, ang_corte
-    ))
+    opts_c = [_rotulo_talude(r) for r in _PRESETS_CORTE] + [_PERSONALIZADO]
+    sel_c = st.selectbox("Talude de corte", opts_c, index=1)  # 1:1 (45\u00b0)
+    if sel_c == _PERSONALIZADO:
+        talude_corte_h = st.number_input(
+            "Corte \u2014 N (horizontal para 1 vertical)",
+            value=1.0, min_value=0.1, step=0.25, key="corte_custom",
+        )
+    else:
+        talude_corte_h = _PRESETS_CORTE[opts_c.index(sel_c)]
+    talude_corte_v = 1.0
 with col_ta:
-    talude_aterro_h = st.number_input("Talude aterro \u2014 H (horizontal)", value=2.0, min_value=0.1, step=0.5)
-    talude_aterro_v = st.number_input("Talude aterro \u2014 V (vertical)", value=1.0, min_value=0.1, step=0.5)
-    ang_aterro = math.degrees(math.atan(talude_aterro_v / talude_aterro_h))
-    st.caption("Inclina\u00e7\u00e3o: 1:{:.0f} (H:V) \u00b7 {:.1f}\u00b0 com a horizontal".format(
-        talude_aterro_h / talude_aterro_v, ang_aterro
-    ))
+    opts_a = [_rotulo_talude(r) for r in _PRESETS_ATERRO] + [_PERSONALIZADO]
+    sel_a = st.selectbox("Talude de aterro", opts_a, index=1)  # 1:2 (26,6\u00b0)
+    if sel_a == _PERSONALIZADO:
+        talude_aterro_h = st.number_input(
+            "Aterro \u2014 N (horizontal para 1 vertical)",
+            value=2.0, min_value=0.1, step=0.25, key="aterro_custom",
+        )
+    else:
+        talude_aterro_h = _PRESETS_ATERRO[opts_a.index(sel_a)]
+    talude_aterro_v = 1.0
 
 # Salva parametros no session_state
 parametros = ParametrosPadrao(
