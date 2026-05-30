@@ -17,16 +17,20 @@ DIAS = [
     ("2026-03-30", 2, 1, 145, 1),
     ("2026-03-31", 8, 4, 515, 306),
     ("2026-05-01", 1, 0, 33, 0),
-    ("2026-05-30", 5, 4, 594, 296),
+    ("2026-05-30", 6, 0, 712, 297),
 ]
+# Reais (GitHub): PRs #1-#30, todos mesclados.
 PRS_MESCLADOS = 30
 BRANCHES_FEATURE = 10
 PERIODO = "26/mar a 30/mai de 2026"
 
-# ── Investimento (ajustaveis) ──
-# Preencha com os valores reais da sua jornada.
-HORAS_DEV = 30          # horas de desenvolvimento assistido por IA
-CUSTO_USD = None        # custo total em US$ (None oculta o card)
+# ── Investimento ──
+# HORAS_DEV: tempo ativo real, somando a janela de cada dia (1o -> ultimo
+# commit), medido dos timestamps do git (~24 h em 6 dias).
+# CUSTO_USD: o consumo de creditos do Claude Code nao fica no repositorio;
+# preencha com o valor do seu painel de uso (None oculta o card).
+HORAS_DEV = 24
+CUSTO_USD = None
 
 total_commits = sum(d[1] for d in DIAS)
 total_add = sum(d[3] for d in DIAS)
@@ -61,11 +65,16 @@ c3.metric("Linhas de codigo", "+{:,}".format(total_add), delta="-{:,}".format(to
 c4.metric("Frentes de trabalho", "{}".format(BRANCHES_FEATURE), delta=PERIODO, delta_color="off")
 
 ci1, ci2 = st.columns(2)
-ci1.metric("Horas de desenvolvimento", "~{} h".format(HORAS_DEV))
+ci1.metric("Horas ativas (git)", "~{} h".format(HORAS_DEV), delta="6 dias de trabalho", delta_color="off")
 if CUSTO_USD is not None:
     ci2.metric("Custo total", "US$ {:,.0f}".format(CUSTO_USD))
 else:
     ci2.metric("Custo por entrega", "fracao de uma hora de engenharia")
+st.caption(
+    "Horas ativas medidas pela janela entre o primeiro e o ultimo commit de "
+    "cada dia (dado real do git). PRs e linhas vem do historico do "
+    "repositorio; os 30 PRs (#1 a #30) estao todos mesclados."
+)
 
 # ── Grafico: atividade ao longo do tempo ──
 st.markdown("---")
