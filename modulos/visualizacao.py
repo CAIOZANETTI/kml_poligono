@@ -129,20 +129,35 @@ def _decimar(*arrays: np.ndarray, alvo: int = 140):
     return [None if a is None else a[sl] for a in arrays]
 
 
-def _plano_datum(mx: np.ndarray, my: np.ndarray, cota: float, opacidade: float):
-    """Plano de projeto leve: um quad 2x2 sobre o bounding box, na cota."""
-    x0, x1 = float(np.nanmin(mx)), float(np.nanmax(mx))
-    y0, y1 = float(np.nanmin(my)), float(np.nanmax(my))
+def _plano_projeto(mx, my, z_mascara, cota: float, opacidade: float):
+    """Plataforma de projeto recortada ao poligono (plano horizontal na cota).
+
+    Usa a mascara de NaN do terreno para nao vazar para fora do lote.
+    """
+    z = np.where(~np.isnan(z_mascara), float(cota), np.nan)
     return go.Surface(
-        x=np.array([[x0, x1], [x0, x1]]),
-        y=np.array([[y0, y0], [y1, y1]]),
-        z=np.full((2, 2), float(cota)),
-        colorscale=[[0, "rgba(120,120,120,1)"], [1, "rgba(120,120,120,1)"]],
+        x=mx, y=my, z=z,
+        colorscale=[[0, "rgba(140,140,140,1)"], [1, "rgba(140,140,140,1)"]],
         opacity=opacidade,
         showscale=False,
         name="Plataforma de projeto",
+        connectgaps=False,
         hoverinfo="name",
+        lighting=dict(ambient=1.0, diffuse=0.0, specular=0.0),
     )
+
+
+def _contorno_intersecao(z_terreno: np.ndarray, cota: float) -> dict:
+    """Contorno em z=cota: a linha onde o plano de projeto corta o terreno."""
+    zmin = float(np.nanmin(z_terreno))
+    zmax = float(np.nanmax(z_terreno))
+    return dict(z=dict(
+        show=True,
+        start=float(cota), end=float(cota),
+        size=max(zmax - zmin, 1.0),
+        color="#111111", width=3,
+        usecolormap=False,
+    ))
 
 
 def _aspecto_cena(mx: np.ndarray, my: np.ndarray, exagero_vertical: int) -> dict:
@@ -191,27 +206,25 @@ def _criar_terreno_3d(
             cmin=-maxabs, cmid=0.0, cmax=maxabs,
             colorbar=dict(title="Corte (+) / Aterro (−) (m)", thickness=14),
         )
+        # Linha de intersecao plano x terreno (divisa corte/aterro)
+        contour_kwargs = dict(contours=_contorno_intersecao(z_terreno, cota_referencia))
     else:
         cor_kwargs = dict(colorscale="Earth", colorbar=dict(title="Elev. (m)", thickness=14))
+        contour_kwargs = {}
 
-    contour_kwargs = {}
-    if contornos:
-        contour_kwargs = dict(contours_z=dict(
-            show=True, highlightcolor="limegreen", project_z=True,
-        ))
-
+    # connectgaps=False: respeita a borda do poligono (sem costurar buracos)
     fig.add_trace(go.Surface(
         x=mx, y=my, z=z_terreno,
         name="Terreno",
-        connectgaps=True,
+        connectgaps=False,
         lighting=dict(ambient=0.65, diffuse=0.85, roughness=0.6, specular=0.15),
         **cor_kwargs,
         **contour_kwargs,
     ))
 
-    # Plataforma de projeto: plano horizontal leve (quad 2x2) na cota
+    # Plataforma de projeto: plano horizontal recortado ao poligono, na cota
     if cota_referencia is not None:
-        fig.add_trace(_plano_datum(mx, my, cota_referencia, opacidade=0.35))
+        fig.add_trace(_plano_projeto(mx, my, z_terreno, cota_referencia, opacidade=0.30))
 
     if grade is not None:
         borda = grade.pontos_borda
@@ -436,8 +449,8 @@ def criar_corte_aterro_3d(
     if trace_corte is not None:
         fig.add_trace(trace_corte)
 
-    # ── Plataforma de projeto: plano horizontal leve (quad 2x2) na cota ──
-    fig.add_trace(_plano_datum(mx, my, cota_projeto, opacidade=opacidade_projeto))
+    # ── Plataforma de projeto: plano horizontal recortado ao poligono ──
+    fig.add_trace(_plano_projeto(mx, my, z_terreno, cota_projeto, opacidade=opacidade_projeto))
 
     _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_terreno)))
 
