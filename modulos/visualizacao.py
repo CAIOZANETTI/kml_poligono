@@ -15,11 +15,47 @@ from modulos.tema import CORES
 _TEMPLATE = "plotly_white"
 
 
+# Escala corte/aterro: azul (aterro, abaixo do projeto) → branco → vermelho (corte, acima)
+_ESCALA_CORTE_ATERRO = [
+    [0.0, CORES["aterro"]],
+    [0.5, "#f7f7f7"],
+    [1.0, CORES["corte"]],
+]
+
+
 # ── Helpers offset ──
 
 def _offset_xy(superficie: SuperficieTerreno):
     """Retorna (x_min, y_min) para transformar coordenadas em relativas."""
     return float(superficie.grade_x.min()), float(superficie.grade_y.min())
+
+
+# ── Indicacao de norte ──
+# Coordenadas em UTM: X = Easting (Leste), Y = Northing (Norte).
+# Logo o eixo Y aponta para o norte verdadeiro.
+
+def _anotacao_norte_2d(fig: go.Figure) -> None:
+    """Adiciona seta de norte (para cima) no canto do grafico 2D."""
+    fig.add_annotation(
+        x=0.98, y=0.97, xref="paper", yref="paper",
+        text="<b>N</b>", showarrow=True, arrowhead=2,
+        arrowsize=1.2, arrowwidth=2, arrowcolor="#444",
+        ax=0, ay=36, font=dict(size=14, color="#444"),
+    )
+
+
+def _arrow_norte_3d(fig: go.Figure, mx, my, z_level: float) -> None:
+    """Adiciona seta de norte 3D (aponta para +Y) que gira junto com a cena."""
+    x0 = float(np.nanmax(mx))
+    y_min, y_max = float(np.nanmin(my)), float(np.nanmax(my))
+    comprimento = 0.12 * (y_max - y_min)
+    fig.add_trace(go.Scatter3d(
+        x=[x0, x0], y=[y_min, y_min + comprimento], z=[z_level, z_level],
+        mode="lines+text", line=dict(color="#444", width=5),
+        text=["", "N"], textposition="top center",
+        textfont=dict(size=14, color="#444"),
+        hoverinfo="skip", showlegend=False,
+    ))
 
 
 # ── Mapa de contorno ──
@@ -66,57 +102,128 @@ def criar_mapa_contorno(
 
     fig.update_layout(
         title=titulo,
-        xaxis_title="X (m)",
-        yaxis_title="Y (m)",
+        xaxis_title="Leste (m)",
+        yaxis_title="Norte (m)",
         yaxis_scaleanchor="x",
         template=_TEMPLATE,
         height=600,
     )
+    _anotacao_norte_2d(fig)
     return fig
 
 
 # ── Helpers 3D ──
 
-def _preparar_z_3d(
-    elevacao_malha: np.ndarray,
-    exagero_vertical: int = 1,
-    cota_referencia: Optional[float] = None,
-) -> tuple:
-    """Prepara dados Z para visualizacao 3D."""
+def _exagero(z: np.ndarray, z_ref: float, fator: int) -> np.ndarray:
+    """Exagera o relevo em torno de z_ref, preservando a cota de referencia."""
+    if fator > 1:
+        return (z - z_ref) * fator + z_ref
+    return z
+
+
+def _criar_terreno_3d(
+    superficie: SuperficieTerreno,
+    grade: Optional[GradePoligono],
+    titulo: str,
+    exagero_vertical: int,
+    cota_referencia: Optional[float],
+    contornos: bool,
+) -> go.Figure:
+    """Terreno 3D em elevacao real, colorido por corte/aterro relativo a cota.
+
+    A geometria sempre mostra o relevo verdadeiro. A plataforma de projeto
+    e um plano horizontal independente (nao deformado) na cota desejada.
+    """
+    fig = go.Figure()
+    ox, oy = _offset_xy(superficie)
+
+    elev = superficie.elevacao_malha
+    z_ref = float(np.nanmean(elev))
+    z_terreno = _exagero(elev, z_ref, exagero_vertical)
+
+    z_label = "Elevação (m)"
+    if exagero_vertical > 1:
+        z_label += " (exagero {}x)".format(exagero_vertical)
+
+    # Cor por corte (terreno acima do projeto, +) / aterro (abaixo, -)
     if cota_referencia is not None:
-        z_data = cota_referencia - elevacao_malha
-        z_label = "Altura (m) [+ aterro / - corte]"
-        colorscale = "RdBu"
-        colorbar = dict(title="Altura (m)")
-        if exagero_vertical > 1:
-            z_data = z_data * exagero_vertical
-            z_label += " ({}x)".format(exagero_vertical)
-        return z_data, z_label, colorscale, colorbar
+        delta = elev - cota_referencia  # >0 corte (vermelho), <0 aterro (azul)
+        maxabs = float(np.nanmax(np.abs(delta))) or 1.0
+        cor_kwargs = dict(
+            surfacecolor=delta,
+            colorscale=_ESCALA_CORTE_ATERRO,
+            cmin=-maxabs, cmid=0.0, cmax=maxabs,
+            colorbar=dict(title="Corte (+) / Aterro (−) (m)"),
+        )
     else:
-        z_data = elevacao_malha
-        z_label = "Elev. (m)"
-        if exagero_vertical > 1:
-            z_media = float(np.nanmean(z_data))
-            z_data = (z_data - z_media) * exagero_vertical + z_media
-            z_label += " (exagero {}x)".format(exagero_vertical)
-        return z_data, z_label, None, dict(title="Elev. (m)")
+        cor_kwargs = dict(colorscale="Earth", colorbar=dict(title="Elev. (m)"))
 
+    contour_kwargs = {}
+    if contornos:
+        contour_kwargs = dict(contours_z=dict(
+            show=True, highlightcolor="limegreen", project_z=True,
+        ))
 
-def _preparar_z_borda(
-    borda_z: np.ndarray,
-    exagero_vertical: int = 1,
-    cota_referencia: Optional[float] = None,
-    z_media: Optional[float] = None,
-) -> np.ndarray:
-    """Aplica mesma transformacao Z nos pontos de borda."""
+    fig.add_trace(go.Surface(
+        x=superficie.malha_x - ox,
+        y=superficie.malha_y - oy,
+        z=z_terreno,
+        name="Terreno",
+        connectgaps=True,
+        **cor_kwargs,
+        **contour_kwargs,
+    ))
+
+    # Plataforma de projeto: plano horizontal livre na cota desejada
     if cota_referencia is not None:
-        borda_z_out = cota_referencia - borda_z
-        if exagero_vertical > 1:
-            borda_z_out = borda_z_out * exagero_vertical
-        return borda_z_out
-    elif exagero_vertical > 1 and z_media is not None:
-        return (borda_z - z_media) * exagero_vertical + z_media
-    return borda_z
+        z_plano = _exagero(
+            np.full_like(elev, cota_referencia), z_ref, exagero_vertical,
+        )
+        z_plano = np.where(~np.isnan(elev), z_plano, np.nan)
+        fig.add_trace(go.Surface(
+            x=superficie.malha_x - ox,
+            y=superficie.malha_y - oy,
+            z=z_plano,
+            colorscale=[[0, "rgba(120,120,120,0.35)"], [1, "rgba(120,120,120,0.35)"]],
+            opacity=0.45,
+            showscale=False,
+            name="Plataforma de projeto ({:.2f} m)".format(cota_referencia),
+            connectgaps=True,
+            hoverinfo="name",
+        ))
+
+    if grade is not None:
+        borda = grade.pontos_borda
+        borda_fechada = np.vstack([borda, borda[0:1]])
+        borda_z = _exagero(borda_fechada[:, 2], z_ref, exagero_vertical)
+        fig.add_trace(go.Scatter3d(
+            x=borda_fechada[:, 0] - ox,
+            y=borda_fechada[:, 1] - oy,
+            z=borda_z,
+            mode="lines",
+            line=dict(color=CORES["borda"], width=3),
+            name="Borda",
+        ))
+
+    _arrow_norte_3d(
+        fig, superficie.malha_x - ox, superficie.malha_y - oy,
+        float(np.nanmin(z_terreno)),
+    )
+
+    fig.update_layout(
+        title=titulo,
+        scene=dict(
+            xaxis_title="Leste (m)",
+            yaxis_title="Norte (m)",
+            zaxis_title=z_label,
+            aspectmode="data",
+        ),
+        template=_TEMPLATE,
+        height=700,
+        margin=dict(l=65, r=50, b=65, t=90),
+        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
+    )
+    return fig
 
 
 def criar_superficie_3d(
@@ -126,53 +233,11 @@ def criar_superficie_3d(
     exagero_vertical: int = 1,
     cota_referencia: Optional[float] = None,
 ) -> go.Figure:
-    """Cria visualizacao 3D do terreno natural."""
-    fig = go.Figure()
-    ox, oy = _offset_xy(superficie)
-
-    z_data, z_label, colorscale, colorbar = _preparar_z_3d(
-        superficie.elevacao_malha, exagero_vertical, cota_referencia,
+    """Visualizacao 3D do terreno natural (sem contornos projetados)."""
+    return _criar_terreno_3d(
+        superficie, grade, titulo, exagero_vertical, cota_referencia,
+        contornos=False,
     )
-
-    fig.add_trace(go.Surface(
-        x=superficie.malha_x - ox,
-        y=superficie.malha_y - oy,
-        z=z_data,
-        colorscale=colorscale or "Earth",
-        colorbar=colorbar,
-        name="Terreno",
-        connectgaps=True,
-    ))
-
-    if grade is not None:
-        borda = grade.pontos_borda
-        borda_fechada = np.vstack([borda, borda[0:1]])
-        z_media = float(np.nanmean(superficie.elevacao_malha))
-        borda_z = _preparar_z_borda(
-            borda_fechada[:, 2], exagero_vertical, cota_referencia, z_media,
-        )
-        fig.add_trace(go.Scatter3d(
-            x=borda_fechada[:, 0] - ox,
-            y=borda_fechada[:, 1] - oy,
-            z=borda_z,
-            mode="lines+markers",
-            line=dict(color=CORES["borda"], width=3),
-            marker=dict(size=2, color=CORES["borda"]),
-            name="Borda",
-        ))
-
-    fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="X (m)",
-            yaxis_title="Y (m)",
-            zaxis_title=z_label,
-            aspectmode="data",
-        ),
-        template=_TEMPLATE,
-        height=700,
-    )
-    return fig
 
 
 def criar_superficie_3d_contornos(
@@ -182,61 +247,11 @@ def criar_superficie_3d_contornos(
     exagero_vertical: int = 1,
     cota_referencia: Optional[float] = None,
 ) -> go.Figure:
-    """Cria Surface 3D com contornos projetados no plano Z."""
-    fig = go.Figure()
-    ox, oy = _offset_xy(superficie)
-
-    z_data, z_label, colorscale, colorbar = _preparar_z_3d(
-        superficie.elevacao_malha, exagero_vertical, cota_referencia,
+    """Surface 3D com contornos projetados no plano Z."""
+    return _criar_terreno_3d(
+        superficie, grade, titulo, exagero_vertical, cota_referencia,
+        contornos=True,
     )
-
-    fig.add_trace(go.Surface(
-        x=superficie.malha_x - ox,
-        y=superficie.malha_y - oy,
-        z=z_data,
-        colorscale=colorscale or "Viridis",
-        colorbar=colorbar if colorscale else dict(title="Elev. (m)"),
-        name="Terreno",
-        connectgaps=True,
-        contours_z=dict(
-            show=True,
-            usecolormap=True,
-            highlightcolor="limegreen",
-            project_z=True,
-        ),
-    ))
-
-    if grade is not None:
-        borda = grade.pontos_borda
-        borda_fechada = np.vstack([borda, borda[0:1]])
-        z_media = float(np.nanmean(superficie.elevacao_malha))
-        borda_z = _preparar_z_borda(
-            borda_fechada[:, 2], exagero_vertical, cota_referencia, z_media,
-        )
-        fig.add_trace(go.Scatter3d(
-            x=borda_fechada[:, 0] - ox,
-            y=borda_fechada[:, 1] - oy,
-            z=borda_z,
-            mode="lines+markers",
-            line=dict(color=CORES["borda"], width=3),
-            marker=dict(size=2, color=CORES["borda"]),
-            name="Borda",
-        ))
-
-    fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="X (m)",
-            yaxis_title="Y (m)",
-            zaxis_title=z_label,
-            aspectmode="data",
-            camera=dict(eye=dict(x=1.87, y=0.88, z=-0.64)),
-        ),
-        template=_TEMPLATE,
-        height=700,
-        margin=dict(l=65, r=50, b=65, t=90),
-    )
-    return fig
 
 
 def _triangular_grade(nrows, ncols):
@@ -256,10 +271,12 @@ def _triangular_grade(nrows, ncols):
     return i_arr, j_arr, k_arr
 
 
-def _criar_solido_mesh3d(mx, my, z_terreno, cor, nome, mascara_face, opacidade=0.85):
-    """Cria Mesh3d solido fechado (topo + base z=0 + paredes laterais).
+def _criar_solido_mesh3d(mx, my, z_terreno, cor, nome, mascara_face,
+                         opacidade=0.85, z_base=0.0):
+    """Cria Mesh3d solido fechado (topo + base + paredes laterais).
 
-    O solido e formado entre a superficie do terreno e o plano z=0.
+    O solido e formado entre a superficie do terreno e o plano horizontal
+    z = z_base (por padrao a cota de projeto).
     """
     nrows, ncols = mx.shape
     x_flat = mx.ravel().astype(float)
@@ -285,10 +302,10 @@ def _criar_solido_mesh3d(mx, my, z_terreno, cor, nome, mascara_face, opacidade=0
     if len(i_top) == 0:
         return None
 
-    # ── Vertices: terreno (0..n-1) + base em z=0 (n..2n-1) ──
+    # ── Vertices: terreno (0..n-1) + base no plano z=z_base (n..2n-1) ──
     x_all = np.concatenate([x_flat, x_flat])
     y_all = np.concatenate([y_flat, y_flat])
-    z_all = np.concatenate([z_flat, np.zeros_like(z_flat)])
+    z_all = np.concatenate([z_flat, np.full_like(z_flat, float(z_base))])
 
     # ── Face superior: triangulos do terreno ──
     # (ja temos i_top, j_top, k_top)
@@ -356,49 +373,48 @@ def criar_corte_aterro_3d(
 ) -> go.Figure:
     """Cria visualizacao 3D de volumes solidos de corte e aterro.
 
-    Cada regiao e um Mesh3d solido fechado (topo + base + paredes)
-    entre a superficie do terreno e o plano de projeto (z=0).
-    Vermelho = corte, Azul = aterro.
+    Geometria em elevacao real. Cada regiao e um Mesh3d solido fechado
+    entre a superficie do terreno e a plataforma de projeto (z=cota).
+    Corte (vermelho) = terreno acima do projeto; aterro (azul) = abaixo.
     """
     fig = go.Figure()
     ox, oy = _offset_xy(superficie)
 
     mx = superficie.malha_x - ox
     my = superficie.malha_y - oy
-    z_terreno = cota_projeto - superficie.elevacao_malha
+    z_terreno = superficie.elevacao_malha.astype(float)  # elevacao real
 
     # ── Classificar cada face como corte ou aterro ──
     nrows, ncols = z_terreno.shape
-    z_flat = z_terreno.ravel().astype(float)
+    z_flat = z_terreno.ravel()
 
     i_all, j_all, k_all = _triangular_grade(nrows, ncols)
 
     z_cent = (z_flat[i_all] + z_flat[j_all] + z_flat[k_all]) / 3.0
-    mascara_aterro = z_cent >= 0
-    mascara_corte = z_cent < 0
+    mascara_corte = z_cent > cota_projeto    # terreno acima -> cortar
+    mascara_aterro = z_cent <= cota_projeto  # terreno abaixo -> aterrar
 
-    # ── Solido Aterro (azul) ──
+    # ── Solido Aterro (azul): enche do terreno ate a plataforma ──
     trace_aterro = _criar_solido_mesh3d(
         mx, my, z_terreno, CORES["aterro"],
-        "Aterro (+)", mascara_aterro, opacidade=0.85,
+        "Aterro (+)", mascara_aterro, opacidade=0.85, z_base=cota_projeto,
     )
     if trace_aterro is not None:
         fig.add_trace(trace_aterro)
 
-    # ── Solido Corte (vermelho) ──
+    # ── Solido Corte (vermelho): entre terreno e plataforma de projeto ──
     trace_corte = _criar_solido_mesh3d(
         mx, my, z_terreno, CORES["corte"],
-        "Corte (\u2212)", mascara_corte, opacidade=0.85,
+        "Corte (\u2212)", mascara_corte, opacidade=0.85, z_base=cota_projeto,
     )
     if trace_corte is not None:
         fig.add_trace(trace_corte)
 
-    # ── Plano de projeto (z = 0) transparente ──
+    # ── Plataforma de projeto: plano horizontal na cota ──
     superficie_proj = gerar_superficie_projeto(superficie, cota_projeto)
-    z_projeto = np.where(~np.isnan(superficie_proj), 0.0, np.nan)
 
     fig.add_trace(go.Surface(
-        x=mx, y=my, z=z_projeto,
+        x=mx, y=my, z=superficie_proj,
         colorscale=[[0, "rgba(180,180,180,0.3)"], [1, "rgba(180,180,180,0.3)"]],
         opacity=opacidade_projeto,
         showscale=False,
@@ -406,12 +422,14 @@ def criar_corte_aterro_3d(
         connectgaps=True,
     ))
 
+    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_terreno)))
+
     fig.update_layout(
         title=titulo,
         scene=dict(
-            xaxis_title="X (m)",
-            yaxis_title="Y (m)",
-            zaxis_title="Altura (m) [+ aterro / \u2212 corte]",
+            xaxis_title="Leste (m)",
+            yaxis_title="Norte (m)",
+            zaxis_title="Eleva\u00e7\u00e3o (m)",
             aspectmode="data",
         ),
         template=_TEMPLATE,
