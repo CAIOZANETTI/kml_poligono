@@ -41,6 +41,15 @@ def test_exemplo_dois_poligonos():
     assert all(p.tem_elevacao for p in polys)
 
 
+def test_exemplo_lg_dois_poligonos_sem_elevacao():
+    """Exemplo pre-carregado da Home: 2 poligonos, elevacao vem do DEM."""
+    with open("exemplos/LG.kml", "rb") as f:
+        polys = ler_arquivo_kml(f.read(), "LG.kml")
+    assert len(polys) == 2
+    assert {p.nome for p in polys} == {"fabrica", "canteiro"}
+    assert all(not p.tem_elevacao for p in polys)
+
+
 def test_multigeometry_nao_duplica():
     kml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark>

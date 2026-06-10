@@ -373,5 +373,8 @@ def seletor_poligono(key: str) -> str:
 def pagina_requer_dados():
     """Verifica se dados estao prontos. Se nao, mostra aviso e para."""
     if not st.session_state.get("dados_json"):
-        st.info("\U0001f446 Fa\u00e7a upload de arquivos KML na p\u00e1gina Home para come\u00e7ar.")
+        st.info(
+            "\U0001f446 Na p\u00e1gina Home, fa\u00e7a upload de arquivos KML ou use o "
+            "exemplo pr\u00e9-carregado (LG.kml) para come\u00e7ar."
+        )
         st.stop()

@@ -5,6 +5,7 @@ Sistema Streamlit para calculo de corte e aterro de poligonos importados via KML
 ## Funcionalidades
 
 - Upload de multiplos arquivos KML (poligonos do Google Earth)
+- Exemplo pre-carregado (exemplos/LG.kml — fabrica da LG, Fazenda Rio Grande/PR) para testar sem arquivo
 - Elevacao automatica via **Copernicus DEM GLO-30** (30m, gratuito) com fallback Open-Meteo/OpenTopoData
 - Calculo de volumes geometricos (in-situ) de corte e aterro pelo metodo de grade (DNIT 106/2009-ES, DNIT 108/2009-ES)
 - Cota otima por bissecao (corte geometrico = aterro geometrico, incluindo taludes)
@@ -21,7 +22,7 @@ misturas) e pertencem a uma analise de materiais separada.
 
 | Pagina | Descricao |
 |---|---|
-| Home | Upload KML, parametros, metricas por poligono |
+| Home | Upload KML ou exemplo pre-carregado, parametros, metricas por poligono |
 | Curvas de Nivel | Mapa de contorno 2D com cota de projeto destacada |
 | Terreno 3D | Surface com contornos, eixo Z relativo (corte/aterro) |
 | Comparacao 3D | Terreno vs plataforma de projeto |
