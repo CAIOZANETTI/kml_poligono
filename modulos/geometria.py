@@ -187,6 +187,21 @@ def utm_para_latlon(
         (latitudes, longitudes) como arrays float.
     """
     n = len(pontos_xy)
+    if n == 0:
+        return np.empty(0), np.empty(0)
+
+    # Caminho vetorizado: a lib utm aceita arrays NumPy diretamente
+    try:
+        lats, lons = utm_lib.to_latlon(
+            np.ascontiguousarray(pontos_xy[:, 0], dtype=float),
+            np.ascontiguousarray(pontos_xy[:, 1], dtype=float),
+            zona, letra,
+        )
+        return np.asarray(lats, dtype=float), np.asarray(lons, dtype=float)
+    except Exception:
+        pass
+
+    # Fallback ponto a ponto
     lats = np.empty(n)
     lons = np.empty(n)
     for i in range(n):

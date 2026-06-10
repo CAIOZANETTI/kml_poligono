@@ -44,8 +44,15 @@ st.info(
     "invadir além da divisa."
 )
 
-# Motor: contorno (independe da cota) + resolucao dos taludes
-contorno = amostrar_contorno(grade, superficie, remocao_vegetal=remocao)
+# Motor: contorno (independe da cota — cacheado para a cota responder
+# instantaneamente) + resolucao dos taludes
+_chave_contorno = (nome, st.session_state.get("dados_versao", 0), round(remocao, 6))
+_cache_contorno = st.session_state.get("_contorno_cache")
+if _cache_contorno is not None and _cache_contorno[0] == _chave_contorno:
+    contorno = _cache_contorno[1]
+else:
+    contorno = amostrar_contorno(grade, superficie, remocao_vegetal=remocao)
+    st.session_state["_contorno_cache"] = (_chave_contorno, contorno)
 tal = resolver_taludes(contorno, cota, r_corte, r_aterro)
 
 fig = criar_greide_3d(

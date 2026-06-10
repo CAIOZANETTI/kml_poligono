@@ -7,7 +7,9 @@ Baseado no padrao do repositorio kml-earthworks.
 import io
 import time
 import math
+import tempfile
 from collections import OrderedDict
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -24,6 +26,9 @@ _TIMEOUT_LEITURA = 10
 # Cada tile ocupa ~50 MB em memoria; o limite evita OOM no Streamlit Cloud.
 _MAX_TILES_CACHE = 6
 _cache_tiles_copernicus = OrderedDict()
+
+# Cache em disco (tempdir): evita rebaixar ~30 MB por tile apos restart
+_DIR_CACHE_DISCO = Path(tempfile.gettempdir()) / "kml_poligono_dem"
 
 _COPERNICUS_URL = (
     "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/"
@@ -55,6 +60,12 @@ def _baixar_tile_copernicus(lat_floor: int, lon_floor: int) -> Optional[np.ndarr
         _cache_tiles_copernicus.move_to_end(chave)
         return _cache_tiles_copernicus[chave]
 
+    # Cache em disco (apos restart do processo)
+    data = _ler_tile_disco(chave)
+    if data is not None:
+        _guardar_tile_cache(chave, data)
+        return data
+
     url = _copernicus_tile_url(lat_floor, lon_floor)
 
     try:
@@ -72,11 +83,34 @@ def _baixar_tile_copernicus(lat_floor: int, lon_floor: int) -> Optional[np.ndarr
             data = tif.pages[0].asarray()
 
         _guardar_tile_cache(chave, data)
+        _gravar_tile_disco(chave, data)
         return data
 
     except Exception:
         _guardar_tile_cache(chave, None)
         return None
+
+
+def _caminho_tile_disco(chave) -> Path:
+    return _DIR_CACHE_DISCO / "tile_{}_{}.npy".format(chave[0], chave[1])
+
+
+def _ler_tile_disco(chave) -> Optional[np.ndarray]:
+    try:
+        caminho = _caminho_tile_disco(chave)
+        if caminho.exists():
+            return np.load(caminho)
+    except Exception:
+        pass
+    return None
+
+
+def _gravar_tile_disco(chave, data: np.ndarray) -> None:
+    try:
+        _DIR_CACHE_DISCO.mkdir(parents=True, exist_ok=True)
+        np.save(_caminho_tile_disco(chave), data)
+    except Exception:
+        pass  # cache em disco e melhor-esforco
 
 
 def _guardar_tile_cache(chave, data) -> None:
@@ -436,25 +470,34 @@ def _preencher_ausentes_por_vizinho(pontos: List[PontoKML]) -> None:
 def obter_elevacao_grade_dem(latitudes: np.ndarray, longitudes: np.ndarray) -> np.ndarray:
     """Amostra elevacao dos pontos internos da grade direto dos tiles Copernicus.
 
-    Pensada para milhares de pontos: usa apenas os tiles ja baixados/cacheados
-    (sem martelar as APIs REST de fallback). Pontos sem dado retornam NaN e
+    Pensada para milhares de pontos: agrupa por tile e amostra todos os
+    pixels de uma vez com indexacao NumPy (sem loop Python por ponto e sem
+    martelar as APIs REST de fallback). Pontos sem dado retornam NaN e
     devem ser preenchidos por interpolacao a partir da borda.
 
     Returns:
         Array float com elevacoes (NaN onde indisponivel).
     """
-    n = len(latitudes)
-    elevacoes = np.full(n, np.nan)
+    lats = np.asarray(latitudes, dtype=float)
+    lons = np.asarray(longitudes, dtype=float)
+    elevacoes = np.full(len(lats), np.nan)
 
-    for i in range(n):
-        lat = float(latitudes[i])
-        lon = float(longitudes[i])
-        tile = _baixar_tile_copernicus(math.floor(lat), math.floor(lon))
+    lat_floor = np.floor(lats).astype(np.int64)
+    lon_floor = np.floor(lons).astype(np.int64)
+
+    for la, lo in set(zip(lat_floor.tolist(), lon_floor.tolist())):
+        tile = _baixar_tile_copernicus(la, lo)
         if tile is None:
             continue
-        val = _amostrar_elevacao_tile(tile, lat, lon, math.floor(lat), math.floor(lon))
-        if val is not None:
-            elevacoes[i] = val
+
+        m = (lat_floor == la) & (lon_floor == lo)
+        nrows, ncols = tile.shape
+        col = np.clip(((lons[m] - lo) * ncols).astype(np.int64), 0, ncols - 1)
+        row = np.clip(((la + 1 - lats[m]) * nrows).astype(np.int64), 0, nrows - 1)
+
+        vals = tile[row, col].astype(float)
+        vals[vals <= -9999.0] = np.nan  # nodata Copernicus
+        elevacoes[m] = vals
 
     return elevacoes
 
