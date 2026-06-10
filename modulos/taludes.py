@@ -12,37 +12,33 @@ def identificar_celulas_borda(grade: GradePoligono) -> np.ndarray:
     Um ponto e de borda se algum vizinho (4-conectividade) esta
     fora do poligono ou nao existe na grade.
 
+    Implementacao vetorizada: mapeia os pontos para indices inteiros da
+    malha regular (sao multiplos exatos do espacamento) e verifica os
+    vizinhos por deslocamento de matriz booleana.
+
     Returns:
         Array booleano (M,) marcando celulas de borda.
     """
     pontos = grade.pontos_grade
+    n = len(pontos)
+    if n == 0:
+        return np.zeros(0, dtype=bool)
+
     esp = grade.espacamento
+    x0 = pontos[:, 0].min()
+    y0 = pontos[:, 1].min()
+    ix = np.rint((pontos[:, 0] - x0) / esp).astype(np.int64)
+    iy = np.rint((pontos[:, 1] - y0) / esp).astype(np.int64)
 
-    # Cria set de pontos para busca rapida (arredondado)
-    precisao = esp / 10.0
-    pontos_set = set()
-    for i in range(len(pontos)):
-        chave = (
-            round(pontos[i, 0] / precisao) * precisao,
-            round(pontos[i, 1] / precisao) * precisao,
-        )
-        pontos_set.add(chave)
+    # Matriz de ocupacao com moldura de 1 celula (vizinho fora = inexistente)
+    occ = np.zeros((iy.max() + 3, ix.max() + 3), dtype=bool)
+    occ[iy + 1, ix + 1] = True
 
-    borda = np.zeros(len(pontos), dtype=bool)
-    deslocamentos = [(esp, 0), (-esp, 0), (0, esp), (0, -esp)]
-
-    for i in range(len(pontos)):
-        x, y = pontos[i, 0], pontos[i, 1]
-        for dx, dy in deslocamentos:
-            vizinho = (
-                round((x + dx) / precisao) * precisao,
-                round((y + dy) / precisao) * precisao,
-            )
-            if vizinho not in pontos_set:
-                borda[i] = True
-                break
-
-    return borda
+    tem_4_vizinhos = (
+        occ[2:, 1:-1] & occ[:-2, 1:-1] & occ[1:-1, 2:] & occ[1:-1, :-2]
+    )
+    borda_grid = occ[1:-1, 1:-1] & ~tem_4_vizinhos
+    return borda_grid[iy, ix]
 
 
 def calcular_volume_talude_corte(
@@ -52,16 +48,22 @@ def calcular_volume_talude_corte(
     inclinacao_h: float = 1.0,
     inclinacao_v: float = 1.0,
     remocao_vegetal: float = 0.30,
+    borda: np.ndarray = None,
 ) -> float:
     """Calcula volume adicional dos taludes de corte nas bordas.
 
     Para celulas de borda com corte, o talude se estende para fora.
     Volume prisma triangular = 0.5 * h^2 * (H/V) * comprimento_segmento.
 
+    Args:
+        borda: Mascara de celulas de borda ja calculada (opcional, evita
+            recalcular quando o chamador processa corte e aterro juntos).
+
     Returns:
         Volume adicional de corte em m3.
     """
-    borda = identificar_celulas_borda(grade)
+    if borda is None:
+        borda = identificar_celulas_borda(grade)
     elevacoes = superficie.elevacao_grade
     esp = grade.espacamento
 
@@ -89,6 +91,7 @@ def calcular_volume_talude_aterro(
     inclinacao_h: float = 2.0,
     inclinacao_v: float = 1.0,
     remocao_vegetal: float = 0.30,
+    borda: np.ndarray = None,
 ) -> float:
     """Calcula volume adicional dos taludes de aterro nas bordas.
 
@@ -97,7 +100,8 @@ def calcular_volume_talude_aterro(
     Returns:
         Volume adicional de aterro em m3.
     """
-    borda = identificar_celulas_borda(grade)
+    if borda is None:
+        borda = identificar_celulas_borda(grade)
     elevacoes = superficie.elevacao_grade
     esp = grade.espacamento
 

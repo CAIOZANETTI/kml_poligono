@@ -134,6 +134,34 @@ def test_utm_para_latlon_roundtrip():
     assert np.all(np.abs(lons + 46.65) < 0.01)
 
 
+def test_borda_vetorizada_equivale_referencia():
+    """identificar_celulas_borda vetorizada == implementacao de referencia."""
+    from modulos.taludes import identificar_celulas_borda
+
+    poly = _poligono_circular()
+    grade = processar_poligono(poly, espacamento=20.0)
+    pontos, esp = grade.pontos_grade, grade.espacamento
+
+    # Referencia: set de pontos + 4 vizinhos (forma original, O(N) Python)
+    precisao = esp / 10.0
+    pontos_set = {
+        (round(p[0] / precisao) * precisao, round(p[1] / precisao) * precisao)
+        for p in pontos
+    }
+    ref = np.zeros(len(pontos), dtype=bool)
+    for i, (x, y) in enumerate(pontos):
+        for dx, dy in [(esp, 0), (-esp, 0), (0, esp), (0, -esp)]:
+            viz = (round((x + dx) / precisao) * precisao,
+                   round((y + dy) / precisao) * precisao)
+            if viz not in pontos_set:
+                ref[i] = True
+                break
+
+    vec = identificar_celulas_borda(grade)
+    assert np.array_equal(vec, ref)
+    assert vec.any() and not vec.all()  # tem borda e tem interior
+
+
 # ─── Volumes ───
 
 def test_cota_otima_inclui_taludes():

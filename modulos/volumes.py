@@ -99,17 +99,21 @@ def calcular_volumes(
     area_corte = float(int(np.sum(mascara_corte)) * area_celula)
     area_aterro = float(int(np.sum(mascara_aterro)) * area_celula)
 
-    # Volumes de talude
+    # Volumes de talude (mascara de borda calculada uma unica vez)
     vol_talude_corte = 0.0
     vol_talude_aterro = 0.0
     if grade is not None:
+        from modulos.taludes import identificar_celulas_borda
+        borda = identificar_celulas_borda(grade)
         vol_talude_corte = float(calcular_volume_talude_corte(
             grade, superficie, float(cota_projeto),
             float(talude_corte_h), float(talude_corte_v), float(remocao_vegetal),
+            borda=borda,
         ))
         vol_talude_aterro = float(calcular_volume_talude_aterro(
             grade, superficie, float(cota_projeto),
             float(talude_aterro_h), float(talude_aterro_v), float(remocao_vegetal),
+            borda=borda,
         ))
         vol_corte += vol_talude_corte
         vol_aterro += vol_talude_aterro

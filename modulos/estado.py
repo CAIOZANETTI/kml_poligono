@@ -91,10 +91,10 @@ def _serializar_superficie(s: SuperficieTerreno) -> dict:
 
 
 def _ndarray_para_lista(arr):
-    """Converte ndarray para lista, tratando NaN como None."""
-    if arr.ndim == 1:
-        return [None if np.isnan(v) else float(v) for v in arr]
-    return [_ndarray_para_lista(row) for row in arr]
+    """Converte ndarray para lista, tratando NaN como None (vetorizado)."""
+    obj = arr.astype(object)
+    obj[np.isnan(arr.astype(float))] = None
+    return obj.tolist()
 
 
 def _lista_para_ndarray(lst):
@@ -187,9 +187,34 @@ def _desserializar_parametros(d: dict) -> ParametrosPadrao:
 
 # ─── Salvar / Carregar dados processados ───
 
+def _assinatura_dados(resultados, cotas, parametros, espacamento, remocao_vegetal):
+    """Assinatura barata do estado calculado, para evitar reserializar tudo
+    a cada rerun do Streamlit quando nada mudou."""
+    return (
+        float(espacamento), float(remocao_vegetal),
+        (parametros.talude_corte_h, parametros.talude_corte_v,
+         parametros.talude_aterro_h, parametros.talude_aterro_v),
+        tuple(sorted(
+            (nome, round(float(cotas.get(nome, 0.0)), 9),
+             round(r.volume_corte, 6), round(r.volume_aterro, 6),
+             round(r.remocao_vegetal, 6))
+            for nome, r in resultados.items()
+        )),
+    )
+
+
 def salvar_dados_sessao(poligonos, grades, superficies, resultados, cotas, parametros,
                         espacamento, remocao_vegetal):
-    """Serializa todos os dados processados em JSON e salva no session_state."""
+    """Serializa todos os dados processados em JSON e salva no session_state.
+
+    Se nada mudou desde o ultimo salvamento (mesma assinatura), nao
+    reserializa — reruns de navegacao ficam imediatos.
+    """
+    assinatura = _assinatura_dados(resultados, cotas, parametros, espacamento, remocao_vegetal)
+    if (st.session_state.get("_assinatura_salva") == assinatura
+            and st.session_state.get("dados_json")):
+        return
+
     dados_json = {
         "poligonos": [_serializar_poligono_kml(p) for p in poligonos],
         "grades": {k: _serializar_grade(v) for k, v in grades.items()},
@@ -201,6 +226,7 @@ def salvar_dados_sessao(poligonos, grades, superficies, resultados, cotas, param
         "remocao_vegetal": remocao_vegetal,
     }
     st.session_state["dados_json"] = dados_json
+    st.session_state["_assinatura_salva"] = assinatura
     # Invalida o cache de objetos desserializados
     st.session_state["dados_versao"] = st.session_state.get("dados_versao", 0) + 1
     st.session_state.pop("_dados_obj_cache", None)
