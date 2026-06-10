@@ -1,6 +1,8 @@
 """Pagina inicial - Upload, parametros, configuracao de poligonos e metricas."""
 
 import math
+from pathlib import Path
+
 import streamlit as st
 from modulos.estado import (
     processar_poligonos, obter_dados, salvar_dados_sessao,
@@ -8,6 +10,10 @@ from modulos.estado import (
 )
 from modulos.volumes import calcular_cota_otima, calcular_volumes
 from modulos.parametros import ParametrosPadrao
+
+_EXEMPLO_KML = Path(__file__).resolve().parent.parent / "exemplos" / "LG.kml"
+_ROTULO_UPLOAD = "Carregar .kml externo"
+_ROTULO_EXEMPLO = "Usar exemplo (LG.kml)"
 
 st.title("Terraplenagem")
 st.caption("importe poligonos kml do google earth para calcular corte e aterro")
@@ -27,14 +33,31 @@ def _fmt_vol(m3: float) -> str:
         return "{:,.1f} mil m³".format(m3 / 1e3)
     return "{:,.0f} m³".format(m3)
 
-# ─── Upload ───
-st.subheader("Upload")
-arquivos_kml = st.file_uploader(
-    "Arquivos KML",
-    type=["kml"],
-    accept_multiple_files=True,
-    help="Poligonos do Google Earth com elevacao",
+# ─── Dados de entrada ───
+st.subheader("Dados de entrada")
+
+fonte_kml = st.radio(
+    "Fonte dos poligonos",
+    [_ROTULO_UPLOAD, _ROTULO_EXEMPLO],
+    horizontal=True,
+    key="fonte_kml",
+    help="O exemplo permite testar o sistema sem ter um arquivo em maos.",
 )
+
+arquivos_kml = None
+if fonte_kml == _ROTULO_UPLOAD:
+    arquivos_kml = st.file_uploader(
+        "Arquivos KML",
+        type=["kml"],
+        accept_multiple_files=True,
+        help="Poligonos do Google Earth com elevacao",
+    )
+else:
+    st.caption(
+        "Exemplo: **fabrica da LG** (Fazenda Rio Grande/PR) — 2 poligonos "
+        "(fabrica e canteiro). O KML nao tem elevacao, entao o terreno vem "
+        "automaticamente do DEM Copernicus (precisa de internet)."
+    )
 
 # ─── Parametros ───
 st.subheader("Parametros")
@@ -116,12 +139,20 @@ st.session_state["parametros"] = parametros
 # ─── Processar arquivos ───
 st.divider()
 
-if arquivos_kml:
+# Monta os bytes da fonte escolhida (upload ou exemplo). Se a fonte mudou,
+# invalida os dados processados; se nada novo foi escolhido, mantem o que ja
+# esta carregado.
+novos_bytes = None
+if fonte_kml == _ROTULO_EXEMPLO:
+    novos_bytes = [(_EXEMPLO_KML.read_bytes(), "LG.kml (exemplo)")]
+elif arquivos_kml:
     novos_bytes = []
     for arq in arquivos_kml:
         conteudo = arq.read()
         arq.seek(0)
         novos_bytes.append((conteudo, arq.name))
+
+if novos_bytes:
     bytes_antigos = st.session_state.get("kml_bytes")
     nomes_novos = sorted([n for _, n in novos_bytes])
     nomes_antigos = sorted([n for _, n in bytes_antigos]) if bytes_antigos else []
@@ -135,7 +166,10 @@ if _dados_json and _dados_json.get("espacamento") != espacamento:
     st.session_state.pop("dados_json", None)
 
 if not processar_poligonos():
-    st.info("Faca upload de arquivos KML acima para comecar.")
+    st.info(
+        "Faca upload de arquivos KML acima — ou selecione "
+        "**{}** para testar sem arquivo.".format(_ROTULO_EXEMPLO)
+    )
     st.stop()
 
 dados = obter_dados()
