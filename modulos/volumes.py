@@ -1,4 +1,8 @@
-"""Calculo de volumes de corte e aterro pelo metodo de grade.
+"""Calculo de volumes GEOMETRICOS de corte e aterro pelo metodo de grade.
+
+Os volumes sao in-situ (geometricos): a conversao de material
+(empolamento/contracao) depende do material real de cada trecho e
+pertence a uma analise de materiais separada.
 
 Referencia: DNIT 106/2009-ES (Cortes), DNIT 108/2009-ES (Aterros).
 """
@@ -11,11 +15,6 @@ import numpy as np
 from modulos.terreno import SuperficieTerreno
 from modulos.geometria import GradePoligono
 from modulos.taludes import calcular_volume_talude_corte, calcular_volume_talude_aterro
-from modulos.parametros import (
-    CategoriaSolo,
-    obter_fator_empolamento,
-    obter_fator_homogeneizacao,
-)
 
 
 @dataclass
@@ -24,18 +23,15 @@ class ResultadoVolume:
     nome_poligono: str
     cota_projeto: float
     area_total: float                # m2
-    volume_corte_bruto: float        # m3 (in-situ)
-    volume_aterro_bruto: float       # m3 (in-situ)
-    volume_corte_empolado: float     # m3 (apos empolamento)
-    volume_aterro_compactado: float  # m3 (apos homogeneizacao)
-    volume_bota_fora: float          # m3 (excesso de corte)
-    volume_solo_importado: float     # m3 (deficit)
-    balanco_massa: float             # m3 (corte_empolado - aterro_compactado)
+    volume_corte: float              # m3 (geometrico, in-situ)
+    volume_aterro: float             # m3 (geometrico)
+    volume_bota_fora: float          # m3 (excesso geometrico de corte)
+    volume_solo_importado: float     # m3 (deficit geometrico)
+    balanco_massa: float             # m3 (corte - aterro, geometrico)
     area_corte: float                # m2
     area_aterro: float               # m2
     elevacao_media_terreno: float
     remocao_vegetal: float
-    categoria_solo: CategoriaSolo
     volume_remocao_vegetal: float = 0.0   # m3 — area * espessura_remocao
     area_total_poligono: float = 0.0      # m2 — area do poligono (sem filtro NaN)
     volume_talude_corte: float = 0.0      # m3 — volume adicional talude corte
@@ -47,7 +43,6 @@ def calcular_volumes(
     cota_projeto: float,
     espacamento: float,
     remocao_vegetal: float = 0.30,
-    categoria: CategoriaSolo = CategoriaSolo.PRIMEIRA,
     nome_poligono: str = "",
     talude_corte_h: float = 1.0,
     talude_corte_v: float = 1.0,
@@ -55,23 +50,19 @@ def calcular_volumes(
     talude_aterro_v: float = 1.0,
     grade: Optional[GradePoligono] = None,
 ) -> ResultadoVolume:
-    """Calcula volumes de corte e aterro pelo metodo de grade.
+    """Calcula volumes geometricos de corte e aterro pelo metodo de grade.
 
     Metodo: cada celula tem area = espacamento^2.
     delta = cota_projeto - (elevacao - remocao_vegetal)
     Positivo = aterro, negativo = corte.
 
-    Fatores DNIT aplicados:
-        volume_corte_empolado = corte_bruto * empolamento
-        volume_aterro_compactado = aterro_bruto * homogeneizacao
-        balanco = corte_empolado - aterro_compactado
+    Balanco geometrico: balanco = corte - aterro.
 
     Args:
         superficie: Terreno interpolado.
         cota_projeto: Cota de projeto (m).
         espacamento: Espacamento da grade (m).
         remocao_vegetal: Camada vegetal removida (m).
-        categoria: Categoria de solo DNIT.
         nome_poligono: Nome para referencia.
         talude_corte_h: Inclinacao horizontal do talude de corte.
         talude_corte_v: Inclinacao vertical do talude de corte.
@@ -102,8 +93,8 @@ def calcular_volumes(
     mascara_corte = delta < 0
     mascara_aterro = delta > 0
 
-    vol_corte_bruto = float(np.sum(np.abs(delta[mascara_corte])) * area_celula)
-    vol_aterro_bruto = float(np.sum(delta[mascara_aterro]) * area_celula)
+    vol_corte = float(np.sum(np.abs(delta[mascara_corte])) * area_celula)
+    vol_aterro = float(np.sum(delta[mascara_aterro]) * area_celula)
 
     area_corte = float(int(np.sum(mascara_corte)) * area_celula)
     area_aterro = float(int(np.sum(mascara_aterro)) * area_celula)
@@ -120,18 +111,11 @@ def calcular_volumes(
             grade, superficie, float(cota_projeto),
             float(talude_aterro_h), float(talude_aterro_v), float(remocao_vegetal),
         ))
-        vol_corte_bruto += vol_talude_corte
-        vol_aterro_bruto += vol_talude_aterro
+        vol_corte += vol_talude_corte
+        vol_aterro += vol_talude_aterro
 
-    # Aplica fatores DNIT
-    fator_emp = obter_fator_empolamento(categoria)
-    fator_hom = obter_fator_homogeneizacao(categoria)
-
-    vol_corte_empolado = vol_corte_bruto * fator_emp
-    vol_aterro_compactado = vol_aterro_bruto * fator_hom
-
-    # Balanco de massa
-    balanco = vol_corte_empolado - vol_aterro_compactado
+    # Balanco de massa geometrico
+    balanco = vol_corte - vol_aterro
     vol_bota_fora = max(0.0, balanco)
     vol_solo_importado = max(0.0, -balanco)
 
@@ -139,10 +123,8 @@ def calcular_volumes(
         nome_poligono=nome_poligono,
         cota_projeto=cota_projeto,
         area_total=area_total_poligono,
-        volume_corte_bruto=vol_corte_bruto,
-        volume_aterro_bruto=vol_aterro_bruto,
-        volume_corte_empolado=vol_corte_empolado,
-        volume_aterro_compactado=vol_aterro_compactado,
+        volume_corte=vol_corte,
+        volume_aterro=vol_aterro,
         volume_bota_fora=vol_bota_fora,
         volume_solo_importado=vol_solo_importado,
         balanco_massa=balanco,
@@ -150,7 +132,6 @@ def calcular_volumes(
         area_aterro=area_aterro,
         elevacao_media_terreno=superficie.elevacao_media,
         remocao_vegetal=remocao_vegetal,
-        categoria_solo=categoria,
         volume_remocao_vegetal=volume_remocao_vegetal,
         area_total_poligono=area_total_poligono,
         volume_talude_corte=vol_talude_corte,
@@ -162,14 +143,22 @@ def calcular_cota_otima(
     superficie: SuperficieTerreno,
     espacamento: float,
     remocao_vegetal: float = 0.30,
-    categoria: CategoriaSolo = CategoriaSolo.PRIMEIRA,
     tolerancia: float = 0.001,
     nome_poligono: str = "",
+    talude_corte_h: float = 1.0,
+    talude_corte_v: float = 1.0,
+    talude_aterro_h: float = 2.0,
+    talude_aterro_v: float = 1.0,
+    grade: Optional[GradePoligono] = None,
 ) -> Tuple[float, ResultadoVolume]:
-    """Calcula cota otima onde corte ajustado = aterro ajustado.
+    """Calcula cota otima onde corte geometrico = aterro geometrico.
 
-    Usa biseccao (binary search). A funcao de balanco e monotonicamnete
+    Usa biseccao (binary search). A funcao de balanco e monotonicamente
     decrescente: cota mais alta -> mais aterro, menos corte.
+
+    Quando ``grade`` e fornecida, os volumes de talude das bordas entram
+    no balanco e no resultado final — mesma base de calculo do fluxo de
+    cota manual.
 
     Args:
         tolerancia: Tolerancia de convergencia em m3.
@@ -177,22 +166,31 @@ def calcular_cota_otima(
     Returns:
         (cota_otima, resultado_volume)
     """
+    from modulos.taludes import identificar_celulas_borda
+
     elevacoes = superficie.elevacao_grade
     mascara_valida = ~np.isnan(elevacoes)
     elev_validas = elevacoes[mascara_valida]
 
     area_celula = espacamento ** 2
-    fator_emp = obter_fator_empolamento(categoria)
-    fator_hom = obter_fator_homogeneizacao(categoria)
 
     # Limites de busca
     if len(elev_validas) == 0:
         cota_padrao = superficie.elevacao_media
         resultado = calcular_volumes(
             superficie, cota_padrao, espacamento,
-            remocao_vegetal, categoria, nome_poligono,
+            remocao_vegetal, nome_poligono,
         )
         return cota_padrao, resultado
+
+    # Elevacoes das celulas de borda (para o termo de talude do balanco)
+    elev_borda = None
+    razao_corte = talude_corte_h / talude_corte_v
+    razao_aterro = talude_aterro_h / talude_aterro_v
+    if grade is not None:
+        borda = identificar_celulas_borda(grade)
+        elev_borda = elevacoes[borda & mascara_valida]
+
     margem = 2.0
     cota_min = float(np.nanmin(elev_validas)) - margem
     cota_max = float(np.nanmax(elev_validas)) + margem
@@ -201,8 +199,8 @@ def calcular_cota_otima(
     for _ in range(100):
         cota_meio = (cota_min + cota_max) / 2.0
         balanco = _funcao_balanco(
-            cota_meio, elev_validas, area_celula,
-            remocao_vegetal, fator_emp, fator_hom,
+            cota_meio, elev_validas, area_celula, remocao_vegetal,
+            elev_borda, razao_corte, razao_aterro, espacamento,
         )
 
         if abs(balanco) < tolerancia:
@@ -215,7 +213,12 @@ def calcular_cota_otima(
 
     resultado = calcular_volumes(
         superficie, cota_meio, espacamento,
-        remocao_vegetal, categoria, nome_poligono,
+        remocao_vegetal, nome_poligono,
+        talude_corte_h=talude_corte_h,
+        talude_corte_v=talude_corte_v,
+        talude_aterro_h=talude_aterro_h,
+        talude_aterro_v=talude_aterro_v,
+        grade=grade,
     )
     return cota_meio, resultado
 
@@ -225,13 +228,17 @@ def _funcao_balanco(
     elevacoes: np.ndarray,
     area_celula: float,
     remocao_vegetal: float,
-    fator_empolamento: float,
-    fator_homogeneizacao: float,
+    elev_borda: Optional[np.ndarray] = None,
+    razao_corte: float = 1.0,
+    razao_aterro: float = 2.0,
+    espacamento: float = 10.0,
 ) -> float:
-    """Funcao auxiliar: retorna balanco de massa para uma dada cota.
+    """Funcao auxiliar: retorna balanco geometrico para uma dada cota.
 
-    f(cota) = corte*empolamento - aterro*homogeneizacao
-    Monotonicamnete decrescente em cota.
+    f(cota) = corte - aterro
+    Monotonicamente decrescente em cota. Inclui os prismas de talude das
+    bordas quando ``elev_borda`` e fornecida (mesma formula de
+    modulos.taludes).
     """
     terreno_ajustado = elevacoes - remocao_vegetal
     delta = cota - terreno_ajustado
@@ -239,7 +246,14 @@ def _funcao_balanco(
     corte = float(np.sum(np.abs(delta[delta < 0])) * area_celula)
     aterro = float(np.sum(delta[delta > 0]) * area_celula)
 
-    return corte * fator_empolamento - aterro * fator_homogeneizacao
+    if elev_borda is not None and len(elev_borda) > 0:
+        delta_b = cota - (elev_borda - remocao_vegetal)
+        h_corte = np.abs(delta_b[delta_b < 0])
+        h_aterro = delta_b[delta_b > 0]
+        corte += float(np.sum(0.5 * h_corte ** 2 * razao_corte * espacamento))
+        aterro += float(np.sum(0.5 * h_aterro ** 2 * razao_aterro * espacamento))
+
+    return corte - aterro
 
 
 def calcular_volumes_por_faixas(
@@ -248,10 +262,9 @@ def calcular_volumes_por_faixas(
     espacamento: float,
     num_faixas: int = 10,
     remocao_vegetal: float = 0.30,
-    categoria: CategoriaSolo = CategoriaSolo.PRIMEIRA,
     direcao: str = "norte_sul",
 ) -> List[Dict]:
-    """Divide o poligono em faixas e calcula volumes por segmento.
+    """Divide o poligono em faixas e calcula volumes geometricos por segmento.
 
     Args:
         direcao: 'norte_sul' (faixas ao longo de Y) ou 'leste_oeste' (ao longo de X).
@@ -270,17 +283,12 @@ def calcular_volumes_por_faixas(
     # Eixo de corte: Y para norte-sul, X para leste-oeste
     if direcao == "leste_oeste":
         eixo_idx = 0  # corta ao longo de X
-        eixo_nome = "x"
     else:
         eixo_idx = 1  # corta ao longo de Y
-        eixo_nome = "y"
 
     eixo_validos = coords_validos[:, eixo_idx]
     eixo_min, eixo_max = float(eixo_validos.min()), float(eixo_validos.max())
     limites = np.linspace(eixo_min, eixo_max, num_faixas + 1)
-
-    fator_emp = obter_fator_empolamento(categoria)
-    fator_hom = obter_fator_homogeneizacao(categoria)
 
     faixas = []
     for i in range(num_faixas):
@@ -308,9 +316,7 @@ def calcular_volumes_por_faixas(
             "direcao": direcao,
             "vol_corte": vol_corte,
             "vol_aterro": vol_aterro,
-            "vol_corte_empolado": vol_corte * fator_emp,
-            "vol_aterro_compactado": vol_aterro * fator_hom,
-            "balanco": vol_corte * fator_emp - vol_aterro * fator_hom,
+            "balanco": vol_corte - vol_aterro,
             "num_pontos": int(mascara_faixa.sum()),
         })
 

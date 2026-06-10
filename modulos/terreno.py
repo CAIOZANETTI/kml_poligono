@@ -27,14 +27,23 @@ class SuperficieTerreno:
 def interpolar_terreno(
     grade: GradePoligono,
     metodo: str = "cubic",
+    elevacao_grade_conhecida: np.ndarray = None,
 ) -> SuperficieTerreno:
     """Interpola elevacao do terreno nos pontos da grade interna.
 
-    Usa scipy.griddata com elevacoes dos vertices da borda como pontos conhecidos.
+    Quando ``elevacao_grade_conhecida`` e fornecida (amostragem direta do DEM
+    nos pontos internos), ela e usada como fonte primaria — o relevo interno
+    real e capturado. Pontos NaN remanescentes sao preenchidos por
+    interpolacao a partir da borda e dos pontos validos.
+
+    Sem ela (caso de KML com elevacao propria, ex. levantamento RTK apenas
+    nos vertices), usa scipy.griddata com as elevacoes da borda.
 
     Args:
         grade: GradePoligono com borda e grade interna.
         metodo: Metodo de interpolacao ('linear', 'cubic', 'nearest').
+        elevacao_grade_conhecida: Array (M,) com elevacoes ja amostradas
+            nos pontos da grade (NaN onde indisponivel), ou None.
 
     Returns:
         SuperficieTerreno com elevacoes interpoladas.
@@ -46,24 +55,39 @@ def interpolar_terreno(
     # Pontos onde interpolar: grade interna
     pontos_grade = grade.pontos_grade  # (M, 2)
 
-    # Interpolacao
-    elevacao_grade = griddata(
-        pontos_conhecidos,
-        valores_conhecidos,
-        pontos_grade,
-        method=metodo,
-    )
-
-    # Fallback para nearest onde cubic/linear falha (NaN nas bordas)
-    mascara_nan = np.isnan(elevacao_grade)
-    if mascara_nan.any():
-        elevacao_nearest = griddata(
+    if elevacao_grade_conhecida is not None and len(pontos_grade) > 0:
+        elevacao_grade = np.asarray(elevacao_grade_conhecida, dtype=float).copy()
+        mascara_nan = np.isnan(elevacao_grade)
+        if mascara_nan.any():
+            # Preenche faltantes com borda + pontos de grade validos
+            pts = np.vstack([pontos_conhecidos, pontos_grade[~mascara_nan]])
+            vals = np.concatenate([valores_conhecidos, elevacao_grade[~mascara_nan]])
+            preenchido = griddata(pts, vals, pontos_grade[mascara_nan], method="linear")
+            ainda_nan = np.isnan(preenchido)
+            if ainda_nan.any():
+                preenchido[ainda_nan] = griddata(
+                    pts, vals, pontos_grade[mascara_nan][ainda_nan], method="nearest",
+                )
+            elevacao_grade[mascara_nan] = preenchido
+    else:
+        # Interpolacao a partir da borda
+        elevacao_grade = griddata(
             pontos_conhecidos,
             valores_conhecidos,
-            pontos_grade[mascara_nan],
-            method="nearest",
+            pontos_grade,
+            method=metodo,
         )
-        elevacao_grade[mascara_nan] = elevacao_nearest
+
+        # Fallback para nearest onde cubic/linear falha (NaN nas bordas)
+        mascara_nan = np.isnan(elevacao_grade)
+        if mascara_nan.any():
+            elevacao_nearest = griddata(
+                pontos_conhecidos,
+                valores_conhecidos,
+                pontos_grade[mascara_nan],
+                method="nearest",
+            )
+            elevacao_grade[mascara_nan] = elevacao_nearest
 
     # Cria malha 2D para visualizacao
     malha_x, malha_y, elevacao_malha = criar_malha_2d(grade, elevacao_grade)
@@ -82,38 +106,6 @@ def interpolar_terreno(
         elevacao_media=float(np.nanmean(elev_validos)) if len(elev_validos) > 0 else 0.0,
         pontos_grade_xy=pontos_grade,
     )
-
-
-def calcular_diferenca_terreno(
-    superficie: SuperficieTerreno,
-    cota_projeto: float,
-    remocao_vegetal: float = 0.30,
-) -> np.ndarray:
-    """Calcula diferenca entre cota de projeto e terreno ajustado.
-
-    delta = cota_projeto - (elevacao_terreno - remocao_vegetal)
-    Positivo = aterro, negativo = corte.
-
-    Returns:
-        1D array de deltas em cada ponto da grade.
-    """
-    terreno_ajustado = superficie.elevacao_grade - remocao_vegetal
-    return cota_projeto - terreno_ajustado
-
-
-def gerar_superficie_projeto(
-    superficie: SuperficieTerreno,
-    cota_projeto: float,
-) -> np.ndarray:
-    """Gera superficie plana do projeto na cota especificada.
-
-    Returns:
-        2D array com a cota do projeto (NaN fora do poligono).
-    """
-    projeto = np.full_like(superficie.elevacao_malha, np.nan)
-    mascara = ~np.isnan(superficie.elevacao_malha)
-    projeto[mascara] = cota_projeto
-    return projeto
 
 
 def criar_malha_2d(

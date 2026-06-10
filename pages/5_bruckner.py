@@ -7,9 +7,7 @@ from modulos.estado import pagina_requer_dados, obter_dados, seletor_poligono
 from modulos.volumes import calcular_volumes_por_faixas, extrair_perfil_faixa
 from modulos.bruckner import construir_diagrama_bruckner, identificar_zonas_transporte
 from modulos.visualizacao import criar_diagrama_bruckner as plotar_bruckner, criar_perfil_faixa
-from modulos.parametros import (
-    obter_fator_empolamento, obter_fator_homogeneizacao, premissa_taludes_md,
-)
+from modulos.parametros import premissa_taludes_md
 
 pagina_requer_dados()
 dados = obter_dados()
@@ -23,7 +21,6 @@ nome = seletor_poligono("bruckner")
 
 espacamento = dados["espacamento"]
 remocao_vegetal = dados["remocao_vegetal"]
-categoria = dados["categoria_solo"]
 cota = dados["cotas"][nome]
 superficie = dados["superficies"][nome]
 
@@ -48,19 +45,19 @@ usar_dlt = st.checkbox("Usar DLT", value=False, key="usar_dlt_brk")
 dlt_input = None
 if usar_dlt:
     dlt_input = st.number_input(
-        "DLT (m\u00b3)",
+        "DLT (m)",
         value=0.0,
-        step=100.0,
-        format="%.1f",
+        step=50.0,
+        format="%.0f",
         key="dlt_bruckner",
-        help="Dist\u00e2ncia Limite de Transporte econ\u00f4mico. Acima = bota-fora mais barato.",
+        help="Dist\u00e2ncia Limite de Transporte econ\u00f4mico, em metros. "
+             "Transporte acima da DLT tende a justificar bota-fora/empr\u00e9stimo.",
     )
 
 faixas = calcular_volumes_por_faixas(
     superficie, cota, espacamento,
     num_faixas=int(num_faixas),
     remocao_vegetal=remocao_vegetal,
-    categoria=categoria,
     direcao=direcao_key,
 )
 
@@ -68,14 +65,20 @@ if not faixas:
     st.warning("Nenhuma faixa calculada.")
     st.stop()
 
-resultado_brk = construir_diagrama_bruckner(
-    faixas,
-    fator_empolamento=obter_fator_empolamento(categoria),
-    fator_homogeneizacao=obter_fator_homogeneizacao(categoria),
-)
+resultado_brk = construir_diagrama_bruckner(faixas)
 
 fig_brk = plotar_bruckner(resultado_brk, dlt=dlt_input)
-st.plotly_chart(fig_brk, use_container_width=True)
+st.plotly_chart(fig_brk, width="stretch")
+st.caption(
+    "As faixas consideram apenas a plataforma (sem os taludes de borda); "
+    "por isso o balanço aqui pode diferir do balanço total da Home."
+)
+
+if dlt_input and resultado_brk.dmt > dlt_input:
+    st.warning(
+        "DMT ({:,.0f} m) acima da DLT ({:,.0f} m): avalie bota-fora/empréstimo "
+        "em vez de transporte longitudinal.".format(resultado_brk.dmt, dlt_input)
+    )
 
 b1, b2, b3 = st.columns(3)
 b1.metric(
@@ -103,11 +106,10 @@ st.subheader("Volumes por faixa")
 
 df_faixas = pd.DataFrame(faixas)
 colunas_exibir = [
-    "faixa", "posicao", "vol_corte", "vol_aterro",
-    "vol_corte_empolado", "vol_aterro_compactado", "balanco",
+    "faixa", "posicao", "vol_corte", "vol_aterro", "balanco",
 ]
 colunas_disponiveis = [c for c in colunas_exibir if c in df_faixas.columns]
-st.dataframe(df_faixas[colunas_disponiveis], use_container_width=True)
+st.dataframe(df_faixas[colunas_disponiveis], width="stretch")
 
 # ─── Perfil da faixa ───
 st.divider()
@@ -129,20 +131,16 @@ fig_brk_dest = plotar_bruckner(
     dlt=dlt_input,
     posicao_destaque=faixa_sel["posicao"],
 )
-st.plotly_chart(fig_brk_dest, use_container_width=True)
+st.plotly_chart(fig_brk_dest, width="stretch")
 
 fc1, fc2, fc3 = st.columns(3)
 fc1.metric(
-    "Corte empolado",
-    "{:,.2f} m\u00b3".format(faixa_sel["vol_corte_empolado"]),
-    delta="{:,.2f} m\u00b3 bruto".format(faixa_sel["vol_corte"]),
-    delta_color="off",
+    "Corte (geom\u00e9trico)",
+    "{:,.2f} m\u00b3".format(faixa_sel["vol_corte"]),
 )
 fc2.metric(
-    "Aterro compactado",
-    "{:,.2f} m\u00b3".format(faixa_sel["vol_aterro_compactado"]),
-    delta="{:,.2f} m\u00b3 bruto".format(faixa_sel["vol_aterro"]),
-    delta_color="off",
+    "Aterro (geom\u00e9trico)",
+    "{:,.2f} m\u00b3".format(faixa_sel["vol_aterro"]),
 )
 bal = faixa_sel["balanco"]
 fc3.metric(
@@ -162,7 +160,7 @@ if len(perfil["posicoes"]) > 1:
         perfil, faixa_sel,
         titulo="Perfil faixa {} ({}) - {}".format(faixa_sel["faixa"], dir_label, nome),
     )
-    st.plotly_chart(fig_perfil, use_container_width=True)
+    st.plotly_chart(fig_perfil, width="stretch")
 else:
     st.info("Faixa com poucos pontos para gerar perfil.")
 
@@ -171,6 +169,6 @@ st.divider()
 st.subheader("Zonas de transporte")
 df_zonas = identificar_zonas_transporte(resultado_brk)
 if not df_zonas.empty:
-    st.dataframe(df_zonas, use_container_width=True)
+    st.dataframe(df_zonas, width="stretch")
 else:
     st.info("Nenhuma zona de transporte identificada.")

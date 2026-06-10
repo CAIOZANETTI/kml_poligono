@@ -1,5 +1,5 @@
 # rebuild marker: 2026-05-30 (forca container limpo no Streamlit Cloud)
-streamlit>=1.35.0
+streamlit>=1.36.0  # st.navigation/st.Page exigem 1.36+
 fastkml>=1.0.0
 shapely>=2.0.0
 numpy>=1.26.0

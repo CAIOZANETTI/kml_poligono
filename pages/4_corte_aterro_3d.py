@@ -30,4 +30,4 @@ fig = criar_corte_aterro_3d(
     titulo="Corte e Aterro - {}".format(nome),
     opacidade_projeto=opacidade_proj,
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")

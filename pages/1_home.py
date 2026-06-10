@@ -7,10 +7,7 @@ from modulos.estado import (
     carregar_dados_sessao,
 )
 from modulos.volumes import calcular_cota_otima, calcular_volumes
-from modulos.parametros import (
-    ParametrosPadrao, CategoriaSolo, NOMES_CATEGORIA, FATORES_DNIT,
-    _resolver_categoria,
-)
+from modulos.parametros import ParametrosPadrao
 
 st.title("Terraplenagem")
 st.caption("importe poligonos kml do google earth para calcular corte e aterro")
@@ -55,22 +52,11 @@ with col_rem:
         min_value=0.0, max_value=2.0, value=0.30, step=0.05,
     )
 
-col_cat, col_info = st.columns(2)
-with col_cat:
-    categoria_opcoes = {v: k for k, v in NOMES_CATEGORIA.items()}
-    cat_selecionada = st.selectbox(
-        "Categoria do solo",
-        list(categoria_opcoes.keys()),
-    )
-    categoria_solo = categoria_opcoes[cat_selecionada]
-with col_info:
-    fatores = FATORES_DNIT[_resolver_categoria(categoria_solo)]
-    st.write("")
-    st.caption(
-        "empolamento: {} · homogeneizacao: {}".format(
-            fatores.empolamento, fatores.homogeneizacao
-        )
-    )
+st.caption(
+    "Volumes calculados são **geométricos** (in-situ). Conversões de "
+    "material (empolamento/contração) dependem do material de cada trecho "
+    "e ficam para uma análise de materiais separada."
+)
 
 st.subheader("Taludes")
 st.caption(
@@ -122,11 +108,9 @@ parametros = ParametrosPadrao(
     talude_corte_v=talude_corte_v,
     talude_aterro_h=talude_aterro_h,
     talude_aterro_v=talude_aterro_v,
-    categoria_solo=categoria_solo,
 )
 st.session_state["espacamento"] = espacamento
 st.session_state["remocao_vegetal"] = remocao_vegetal
-st.session_state["categoria_solo"] = categoria_solo
 st.session_state["parametros"] = parametros
 
 # ─── Processar arquivos ───
@@ -145,6 +129,11 @@ if arquivos_kml:
         st.session_state.pop("dados_json", None)
     st.session_state["kml_bytes"] = novos_bytes
 
+# O espacamento define a propria grade: se mudou, reprocessa do zero.
+_dados_json = st.session_state.get("dados_json")
+if _dados_json and _dados_json.get("espacamento") != espacamento:
+    st.session_state.pop("dados_json", None)
+
 if not processar_poligonos():
     st.info("Faca upload de arquivos KML acima para comecar.")
     st.stop()
@@ -155,9 +144,8 @@ grades = dados["grades"]
 superficies = dados["superficies"]
 resultados = dados["resultados"]
 cotas = dados["cotas"]
-espacamento = dados["espacamento"]
-remocao_vegetal = dados["remocao_vegetal"]
-categoria_solo = dados["categoria_solo"]
+# Remocao vegetal usa o valor ATUAL do widget: o loop abaixo recalcula
+# os volumes e salva, refletindo mudancas feitas depois do upload.
 
 # ─── Poligonos Carregados ───
 st.subheader("Poligonos carregados ({})".format(len(poligonos)))
@@ -189,7 +177,12 @@ for poly in poligonos:
         if usar_cota_otima:
             cota_ot, res_ot = calcular_cota_otima(
                 superficie, espacamento, remocao_vegetal,
-                categoria_solo, nome_poligono=nome,
+                nome_poligono=nome,
+                talude_corte_h=parametros.talude_corte_h,
+                talude_corte_v=parametros.talude_corte_v,
+                talude_aterro_h=parametros.talude_aterro_h,
+                talude_aterro_v=parametros.talude_aterro_v,
+                grade=grade,
             )
             st.success("cota otima: **{:.2f} m** (balanco: {:.2f} m\u00b3)".format(
                 cota_ot, res_ot.balanco_massa
@@ -200,7 +193,7 @@ for poly in poligonos:
             cotas[nome] = cota_input
             resultados[nome] = calcular_volumes(
                 superficie, cota_input, espacamento,
-                remocao_vegetal, categoria_solo, nome,
+                remocao_vegetal, nome,
                 talude_corte_h=parametros.talude_corte_h,
                 talude_corte_v=parametros.talude_corte_v,
                 talude_aterro_h=parametros.talude_aterro_h,
@@ -210,17 +203,17 @@ for poly in poligonos:
 
         # Metricas principais (4 por linha, formato compacto)
         res = resultados[nome]
-        balanco_poly = res.volume_corte_empolado - res.volume_aterro_compactado
+        balanco_poly = res.balanco_massa
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Area", _fmt_area(grade.area))
         c2.metric(
-            "Corte", _fmt_vol(res.volume_corte_empolado),
-            delta="empolado", delta_color="off",
+            "Corte", _fmt_vol(res.volume_corte),
+            delta="geométrico", delta_color="off",
         )
         c3.metric(
-            "Aterro", _fmt_vol(res.volume_aterro_compactado),
-            delta="compactado", delta_color="off",
+            "Aterro", _fmt_vol(res.volume_aterro),
+            delta="geométrico", delta_color="off",
         )
         c4.metric(
             "Balanco", _fmt_vol(balanco_poly),
@@ -235,14 +228,14 @@ for poly in poligonos:
             d1.metric("Elev. min / max", "{:.1f} / {:.1f} m".format(
                 superficie.elevacao_min, superficie.elevacao_max,
             ))
-            d2.metric("Corte bruto", _fmt_vol(res.volume_corte_bruto))
-            d2.metric("Aterro bruto", _fmt_vol(res.volume_aterro_bruto))
+            d2.metric("Talude de corte", _fmt_vol(res.volume_talude_corte))
+            d2.metric("Talude de aterro", _fmt_vol(res.volume_talude_aterro))
             d3.metric("Remocao vegetal", _fmt_vol(res.volume_remocao_vegetal))
             d3.metric("Espessura remocao", "{:.2f} m".format(res.remocao_vegetal))
 
 salvar_dados_sessao(
     poligonos, grades, superficies, resultados, cotas,
-    parametros, espacamento, remocao_vegetal, categoria_solo,
+    parametros, espacamento, remocao_vegetal,
 )
 
 # ─── Resumo ───
@@ -250,17 +243,17 @@ st.divider()
 st.subheader("Resumo")
 lista_res = list(resultados.values())
 
-total_corte = sum(r.volume_corte_empolado for r in lista_res)
-total_aterro = sum(r.volume_aterro_compactado for r in lista_res)
+total_corte = sum(r.volume_corte for r in lista_res)
+total_aterro = sum(r.volume_aterro for r in lista_res)
 total_remocao = sum(r.volume_remocao_vegetal for r in lista_res)
 balanco = total_corte - total_aterro
 
 mc1, mc2, mc3, mc4 = st.columns(4)
 mc1.metric(
-    "Corte empolado", _fmt_vol(total_corte),
+    "Corte (geométrico)", _fmt_vol(total_corte),
     delta="{} poligonos".format(len(lista_res)), delta_color="off",
 )
-mc2.metric("Aterro compactado", _fmt_vol(total_aterro))
+mc2.metric("Aterro (geométrico)", _fmt_vol(total_aterro))
 mc3.metric(
     "Balanco", _fmt_vol(balanco),
     delta="bota-fora" if balanco > 0 else ("solo importado" if balanco < 0 else "equilibrio"),
