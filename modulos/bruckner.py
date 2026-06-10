@@ -11,7 +11,7 @@ import pandas as pd
 class ResultadoBruckner:
     """Resultado do diagrama de Bruckner."""
     posicoes: np.ndarray             # posicao ao longo do eixo (m)
-    volumes_acumulados: np.ndarray   # volume acumulado ajustado (m3)
+    volumes_acumulados: np.ndarray   # volume acumulado geometrico (m3)
     dmt: float                       # Distancia Media de Transporte (m)
     volume_bota_fora: float          # m3
     volume_solo_importado: float     # m3
@@ -21,18 +21,14 @@ class ResultadoBruckner:
 
 def construir_diagrama_bruckner(
     volumes_faixas: List[Dict],
-    fator_empolamento: float = 0.77,
-    fator_homogeneizacao: float = 1.00,
 ) -> ResultadoBruckner:
     """Constroi o diagrama de Bruckner a partir dos volumes por faixa.
 
-    O diagrama plota volume acumulado ajustado vs posicao.
-    Volume ajustado = corte * empolamento - aterro * homogeneizacao.
+    O diagrama plota volume acumulado vs posicao.
+    Volume por faixa = corte - aterro (geometrico).
 
     Args:
-        volumes_faixas: Lista de dicts com vol_corte, vol_aterro, posicao_y.
-        fator_empolamento: Fator de empolamento DNIT.
-        fator_homogeneizacao: Fator de homogeneizacao DNIT.
+        volumes_faixas: Lista de dicts com vol_corte, vol_aterro, posicao.
 
     Returns:
         ResultadoBruckner com curva de massa e DMT.
@@ -54,10 +50,7 @@ def construir_diagrama_bruckner(
 
     for i, faixa in enumerate(volumes_faixas):
         posicoes[i + 1] = faixa.get("posicao", faixa.get("posicao_y", 0))
-        balanco_faixa = (
-            faixa["vol_corte"] * fator_empolamento
-            - faixa["vol_aterro"] * fator_homogeneizacao
-        )
+        balanco_faixa = faixa["vol_corte"] - faixa["vol_aterro"]
         volumes_acum[i + 1] = volumes_acum[i] + balanco_faixa
 
     # Posicao inicial = primeira faixa
@@ -67,7 +60,7 @@ def construir_diagrama_bruckner(
     pontos_eq = _encontrar_cruzamentos_zero(posicoes, volumes_acum)
 
     # Calcula DMT
-    dmt = calcular_dmt(volumes_faixas, fator_empolamento, fator_homogeneizacao)
+    dmt = calcular_dmt(volumes_faixas)
 
     # Bota-fora e solo importado
     vol_final = volumes_acum[-1]
@@ -87,14 +80,13 @@ def construir_diagrama_bruckner(
 
 def calcular_dmt(
     volumes_faixas: List[Dict],
-    fator_empolamento: float = 0.77,
-    fator_homogeneizacao: float = 1.00,
 ) -> float:
     """Calcula a Distancia Media de Transporte.
 
     DMT = sum(|Vi| * Di) / sum(|Vi|)
 
-    Onde Vi e o balanco de cada faixa e Di e a distancia ao centroide.
+    Onde Vi e o balanco geometrico de cada faixa e Di e a distancia ao
+    centroide de massa.
     """
     if not volumes_faixas:
         return 0.0
@@ -102,7 +94,7 @@ def calcular_dmt(
     # Centroide de massa
     posicoes = np.array([f.get("posicao", f.get("posicao_y", 0)) for f in volumes_faixas])
     balancos = np.array([
-        f["vol_corte"] * fator_empolamento - f["vol_aterro"] * fator_homogeneizacao
+        f["vol_corte"] - f["vol_aterro"]
         for f in volumes_faixas
     ])
 

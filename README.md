@@ -6,12 +6,15 @@ Sistema Streamlit para calculo de corte e aterro de poligonos importados via KML
 
 - Upload de multiplos arquivos KML (poligonos do Google Earth)
 - Elevacao automatica via **Copernicus DEM GLO-30** (30m, gratuito) com fallback Open-Meteo/OpenTopoData
-- Calculo de volumes de corte e aterro pelo metodo de grade (DNIT 106/2009-ES, DNIT 108/2009-ES)
-- Cota otima por bissecao (corte empolado = aterro compactado)
+- Calculo de volumes geometricos (in-situ) de corte e aterro pelo metodo de grade (DNIT 106/2009-ES, DNIT 108/2009-ES)
+- Cota otima por bissecao (corte geometrico = aterro geometrico, incluindo taludes)
 - Volumes de talude de corte e aterro nas bordas
 - Volume de remocao vegetal separado
-- Fatores DNIT por categoria de solo (1a, 2a, 3a categoria)
 - Diagrama de Bruckner com DMT, DLT e zonas de transporte
+
+Os volumes sao geometricos: conversoes de material (empolamento/contracao)
+dependem do material real de cada trecho (solo, rocha alterada, rocha,
+misturas) e pertencem a uma analise de materiais separada.
 - Relatorios HTML (gerencial + analitico) e planilha Excel
 
 ## Paginas
@@ -34,7 +37,6 @@ Sistema Streamlit para calculo de corte e aterro de poligonos importados via KML
 | Remocao vegetal | 0.30 m | Camada organica removida |
 | Talude de corte | 1H:1V (45 graus) | Inclinacao do talude de corte |
 | Talude de aterro | 2H:1V (26.6 graus) | Inclinacao do talude de aterro |
-| Categoria do solo | 1a Categoria | Fatores DNIT de empolamento/homogeneizacao |
 
 ## Fonte de elevacao
 

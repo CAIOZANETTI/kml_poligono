@@ -13,7 +13,6 @@ from modulos.leitor_kml import ler_arquivo_kml, PoligonoKML, PontoKML
 from modulos.geometria import processar_poligono, utm_para_latlon
 from modulos.terreno import interpolar_terreno
 from modulos.volumes import calcular_volumes, calcular_cota_otima
-from modulos.parametros import CategoriaSolo
 from modulos import elevacao as mod_elevacao
 from modulos.elevacao import completar_elevacao_poligono
 
@@ -133,14 +132,14 @@ def test_cota_otima_inclui_taludes():
     grade = processar_poligono(poly, espacamento=20.0)
     sup = interpolar_terreno(grade)
     cota, res = calcular_cota_otima(
-        sup, 20.0, 0.30, CategoriaSolo.PRIMEIRA, nome_poligono="t",
+        sup, 20.0, 0.30, nome_poligono="t",
         talude_corte_h=1.0, talude_corte_v=1.0,
         talude_aterro_h=2.0, talude_aterro_v=1.0, grade=grade,
     )
     # Resultado final carrega os volumes de talude
     assert res.volume_talude_corte > 0 or res.volume_talude_aterro > 0
-    # Balanco (com taludes) proximo de zero na cota otima
-    assert abs(res.balanco_massa) < max(0.01 * res.volume_corte_empolado, 5.0)
+    # Balanco geometrico (com taludes) proximo de zero na cota otima
+    assert abs(res.balanco_massa) < max(0.01 * res.volume_corte, 5.0)
 
 
 def test_volumes_consistentes_com_cota_media():
@@ -148,12 +147,14 @@ def test_volumes_consistentes_com_cota_media():
     grade = processar_poligono(poly, espacamento=20.0)
     sup = interpolar_terreno(grade)
     res = calcular_volumes(
-        sup, sup.elevacao_media, 20.0, 0.30, CategoriaSolo.PRIMEIRA, "t",
+        sup, sup.elevacao_media, 20.0, 0.30, "t",
         grade=grade,
     )
-    assert res.volume_corte_bruto > 0
-    assert res.volume_aterro_bruto > 0
+    assert res.volume_corte > 0
+    assert res.volume_aterro > 0
     assert res.area_total > 0
+    # Balanco geometrico coerente
+    assert abs(res.balanco_massa - (res.volume_corte - res.volume_aterro)) < 1e-6
 
 
 # ─── Rede (DEM) ───

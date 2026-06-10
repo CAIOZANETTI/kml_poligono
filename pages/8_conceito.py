@@ -45,19 +45,23 @@ st.markdown("---")
 st.markdown("#### 3. Onde colocar o plano?")
 st.markdown(
     "Subir a cota gera mais aterro e menos corte; baixar faz o contrario. "
-    "A **cota otima** e a altura em que o corte (ja empolado) iguala o aterro "
-    "(ja compactado) — o **balanco** fica perto de zero e a obra quase nao "
-    "importa nem descarta terra. Quando sobra material vira **bota-fora**; "
-    "quando falta, vira **solo importado** (emprestimo)."
+    "A **cota otima** e a altura em que o corte iguala o aterro — o "
+    "**balanco** fica perto de zero e a obra quase nao importa nem descarta "
+    "terra. Quando sobra material vira **bota-fora**; quando falta, vira "
+    "**solo importado** (emprestimo)."
 )
 
-# ── 4. Por que corte != aterro no volume ──
+# ── 4. Volumes geometricos ──
 st.markdown("---")
-st.markdown("#### 4. Por que 1 m3 de corte nao vira 1 m3 de aterro")
+st.markdown("#### 4. Os volumes sao geometricos (in-situ)")
 st.markdown(
-    "Solo escavado **incha** (empolamento) e, ao ser compactado no aterro, "
-    "**encolhe** (homogeneizacao). Por isso o balanco usa volumes corrigidos "
-    "por fatores DNIT, e nao o volume geometrico puro."
+    "Todos os volumes desta analise sao medidos **na geometria do terreno** "
+    "(in-situ): quanto espaco o corte ocupa e quanto vazio o aterro preenche. "
+    "Na obra, 1 m3 escavado nao vira exatamente 1 m3 de aterro — solo "
+    "escavado incha (empolamento) e, compactado, encolhe; rocha detonada "
+    "ocupa mais volume. Essas conversoes dependem do **material real de cada "
+    "trecho** (solo, rocha alterada, rocha, misturas) e por isso pertencem a "
+    "uma **analise de materiais separada**, feita com sondagens e ensaios."
 )
 
 # ── 5. Como ler cada tela ──

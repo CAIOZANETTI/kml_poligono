@@ -1,6 +1,8 @@
 """Geracao de relatorio HTML com graficos e tabelas.
 
 CSS baseado no padrao kml_saneamento (mesma paleta e componentes).
+Volumes apresentados sao GEOMETRICOS (in-situ), sem fatores de conversao
+de material.
 """
 
 from typing import List, Dict, Optional
@@ -10,8 +12,7 @@ import plotly.graph_objects as go
 
 from modulos.volumes import ResultadoVolume
 from modulos.parametros import (
-    ParametrosPadrao, NORMAS_REFERENCIA, NOMES_CATEGORIA, FATORES_DNIT,
-    _resolver_categoria, descricao_talude,
+    ParametrosPadrao, NORMAS_REFERENCIA, descricao_talude,
 )
 
 
@@ -196,11 +197,18 @@ document.addEventListener('DOMContentLoaded',initFiltros);
 """
 
 # Icones para uso em f-strings (Python 3.9 nao aceita backslash em f-strings)
-_ICONE_CHECK = "\u2705"
-_ICONE_ALERTA = "\u26a0\ufe0f"
-_ICONE_ERRO = "\u274c"
-_M2 = "m\u00b2"
-_M3 = "m\u00b3"
+_ICONE_CHECK = "✅"
+_ICONE_ALERTA = "⚠️"
+_ICONE_ERRO = "❌"
+_M2 = "m²"
+_M3 = "m³"
+
+_NOTA_GEOMETRICO = (
+    "Volumes geométricos (in-situ), sem fatores de conversão de material. "
+    "A conversão (empolamento/contração) depende do material de cada "
+    "trecho — solo, rocha alterada, rocha ou misturas — e pertence a uma "
+    "análise de materiais separada."
+)
 
 
 def _gerar_memoria_de_calculo(
@@ -208,24 +216,21 @@ def _gerar_memoria_de_calculo(
     parametros: ParametrosPadrao,
 ) -> str:
     """Gera secao HTML da memoria de calculo para cada poligono."""
-    cat = _resolver_categoria(parametros.categoria_solo)
-    cat_nome = NOMES_CATEGORIA[parametros.categoria_solo]
-    fe = FATORES_DNIT[cat].empolamento
-    fh = FATORES_DNIT[cat].homogeneizacao
     norma_cortes = NORMAS_REFERENCIA["cortes"]
     norma_aterros = NORMAS_REFERENCIA["aterros"]
     esp = parametros.espacamento_grade
     area_celula = esp ** 2
     rv = parametros.remocao_vegetal
 
-    html = """
+    html = f"""
 <div class="secao">
-    <h2>Mem\u00f3ria de C\u00e1lculo</h2>"""
+    <h2>Memória de Cálculo</h2>
+    <p style="font-size:11px;color:#757575;">{_NOTA_GEOMETRICO}</p>"""
 
     for r in resultados:
         n_celulas = int(round(r.area_total / area_celula)) if area_celula > 0 else 0
-        v_corte_bruto_plataforma = r.volume_corte_bruto - r.volume_talude_corte
-        v_aterro_bruto_plataforma = r.volume_aterro_bruto - r.volume_talude_aterro
+        v_corte_plataforma = r.volume_corte - r.volume_talude_corte
+        v_aterro_plataforma = r.volume_aterro - r.volume_talude_aterro
         razao_corte = parametros.talude_corte_h / parametros.talude_corte_v
         razao_aterro = parametros.talude_aterro_h / parametros.talude_aterro_v
         desc_corte = descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)
@@ -233,69 +238,68 @@ def _gerar_memoria_de_calculo(
 
         # Pre-computa strings condicionais (backslash nao permitido em f-expr)
         if r.volume_bota_fora > 0:
-            linha_bota = "Balan\u00e7o > 0 \u2192 Bota-fora = {:,.2f} {}".format(
+            linha_bota = "Balanço > 0 → Bota-fora = {:,.2f} {}".format(
                 r.volume_bota_fora, _M3)
         else:
-            linha_bota = "Balan\u00e7o \u2264 0 \u2192 Bota-fora = 0,00 {}".format(_M3)
+            linha_bota = "Balanço ≤ 0 → Bota-fora = 0,00 {}".format(_M3)
         if r.volume_solo_importado > 0:
-            linha_import = "Balan\u00e7o < 0 \u2192 Solo importado = {:,.2f} {}".format(
+            linha_import = "Balanço < 0 → Solo importado = {:,.2f} {}".format(
                 r.volume_solo_importado, _M3)
         else:
-            linha_import = "Balan\u00e7o \u2265 0 \u2192 Solo importado = 0,00 {}".format(_M3)
+            linha_import = "Balanço ≥ 0 → Solo importado = 0,00 {}".format(_M3)
 
         html += f"""
-    <h3>{r.nome_poligono} \u2014 Cota {r.cota_projeto:.2f} m</h3>
+    <h3>{r.nome_poligono} — Cota {r.cota_projeto:.2f} m</h3>
 
     <p><strong>1. Dados de Entrada</strong></p>
     <table>
         <thead><tr><th>Item</th><th>Valor</th></tr></thead>
         <tbody>
             <tr><td>Cota de Projeto</td><td>{r.cota_projeto:.2f} m</td></tr>
-            <tr><td>Eleva\u00e7\u00e3o M\u00e9dia do Terreno</td><td>{r.elevacao_media_terreno:.2f} m</td></tr>
-            <tr><td>Espa\u00e7amento da Grade</td><td>{esp:.1f} m</td></tr>
-            <tr><td>\u00c1rea da C\u00e9lula (espa\u00e7amento\u00b2)</td><td>{area_celula:,.1f} {_M2}</td></tr>
-            <tr><td>N\u00ba de C\u00e9lulas V\u00e1lidas</td><td>{n_celulas:,}</td></tr>
-            <tr><td>Remo\u00e7\u00e3o Vegetal</td><td>{rv:.2f} m</td></tr>
-            <tr><td>Categoria do Solo</td><td>{cat_nome}</td></tr>
+            <tr><td>Elevação Média do Terreno</td><td>{r.elevacao_media_terreno:.2f} m</td></tr>
+            <tr><td>Espaçamento da Grade</td><td>{esp:.1f} m</td></tr>
+            <tr><td>Área da Célula (espaçamento²)</td><td>{area_celula:,.1f} {_M2}</td></tr>
+            <tr><td>Nº de Células Válidas</td><td>{n_celulas:,}</td></tr>
+            <tr><td>Remoção Vegetal</td><td>{rv:.2f} m</td></tr>
         </tbody>
     </table>
 
-    <p><strong>2. Remo\u00e7\u00e3o Vegetal</strong></p>
+    <p><strong>2. Remoção Vegetal</strong></p>
     <table>
-        <thead><tr><th>F\u00f3rmula</th><th>C\u00e1lculo</th><th>Resultado</th></tr></thead>
+        <thead><tr><th>Fórmula</th><th>Cálculo</th><th>Resultado</th></tr></thead>
         <tbody>
             <tr>
-                <td>V<sub>remo\u00e7\u00e3o</sub> = N<sub>c\u00e9lulas</sub> \u00d7 A<sub>c\u00e9lula</sub> \u00d7 espessura</td>
-                <td>{n_celulas:,} \u00d7 {area_celula:,.1f} \u00d7 {rv:.2f}</td>
+                <td>V<sub>remoção</sub> = N<sub>células</sub> × A<sub>célula</sub> × espessura</td>
+                <td>{n_celulas:,} × {area_celula:,.1f} × {rv:.2f}</td>
                 <td>{r.volume_remocao_vegetal:,.2f} {_M3}</td>
             </tr>
         </tbody>
     </table>
 
-    <p><strong>3. C\u00e1lculo de Volumes \u2014 M\u00e9todo de Grade</strong></p>
+    <p><strong>3. Cálculo de Volumes — Método de Grade</strong></p>
     <div style="background:var(--cinza-bg);padding:10px 14px;border-radius:4px;font-family:monospace;font-size:11px;margin:8px 0;">
-        terreno_ajustado = eleva\u00e7\u00e3o \u2212 remo\u00e7\u00e3o_vegetal<br>
-        \u0394 = cota_projeto \u2212 terreno_ajustado<br><br>
-        Se \u0394 &lt; 0 \u2192 <strong>CORTE</strong> &nbsp;(terreno acima do projeto)<br>
-        Se \u0394 &gt; 0 \u2192 <strong>ATERRO</strong> (terreno abaixo do projeto)<br><br>
-        V<sub>corte_bruto</sub>&nbsp; = \u03a3 |\u0394\u1d62| \u00d7 A<sub>c\u00e9lula</sub> &nbsp;(para \u0394\u1d62 &lt; 0)<br>
-        V<sub>aterro_bruto</sub> = \u03a3 &nbsp;\u0394\u1d62 &nbsp;\u00d7 A<sub>c\u00e9lula</sub> &nbsp;(para \u0394\u1d62 &gt; 0)
+        terreno_ajustado = elevação − remoção_vegetal<br>
+        Δ = cota_projeto − terreno_ajustado<br><br>
+        Se Δ &lt; 0 → <strong>CORTE</strong> &nbsp;(terreno acima do projeto)<br>
+        Se Δ &gt; 0 → <strong>ATERRO</strong> (terreno abaixo do projeto)<br><br>
+        V<sub>corte</sub>&nbsp; = Σ |Δᵢ| × A<sub>célula</sub> &nbsp;(para Δᵢ &lt; 0)<br>
+        V<sub>aterro</sub> = Σ &nbsp;Δᵢ &nbsp;× A<sub>célula</sub> &nbsp;(para Δᵢ &gt; 0)
     </div>
     <table>
         <thead><tr><th>Grandeza</th><th>Valor</th></tr></thead>
         <tbody>
-            <tr><td>Corte bruto plataforma (in-situ)</td><td>{v_corte_bruto_plataforma:,.2f} {_M3}</td></tr>
-            <tr><td>Aterro bruto plataforma (in-situ)</td><td>{v_aterro_bruto_plataforma:,.2f} {_M3}</td></tr>
-            <tr><td>\u00c1rea de corte</td><td>{r.area_corte:,.0f} {_M2}</td></tr>
-            <tr><td>\u00c1rea de aterro</td><td>{r.area_aterro:,.0f} {_M2}</td></tr>
+            <tr><td>Corte plataforma (geométrico)</td><td>{v_corte_plataforma:,.2f} {_M3}</td></tr>
+            <tr><td>Aterro plataforma (geométrico)</td><td>{v_aterro_plataforma:,.2f} {_M3}</td></tr>
+            <tr><td>Área de corte</td><td>{r.area_corte:,.0f} {_M2}</td></tr>
+            <tr><td>Área de aterro</td><td>{r.area_aterro:,.0f} {_M2}</td></tr>
         </tbody>
     </table>
 
-    <p><strong>4. Volumes de Talude (bordas do pol\u00edgono)</strong></p>
+    <p><strong>4. Volumes de Talude (bordas do polígono)</strong></p>
     <div style="background:var(--cinza-bg);padding:10px 14px;border-radius:4px;font-family:monospace;font-size:11px;margin:8px 0;">
-        V<sub>talude</sub> = \u03a3 (0,5 \u00d7 h\u1d62\u00b2 \u00d7 (H/V) \u00d7 espa\u00e7amento)<br><br>
-        Talude de corte: &nbsp;{desc_corte} \u2192 raz\u00e3o H/V = {razao_corte:.1f}<br>
-        Talude de aterro: {desc_aterro} \u2192 raz\u00e3o H/V = {razao_aterro:.1f}
+        V<sub>talude</sub> = Σ (0,5 × hᵢ² × (H/V) × espaçamento)<br><br>
+        Talude de corte: &nbsp;{desc_corte} → razão H/V = {razao_corte:.1f}<br>
+        Talude de aterro: {desc_aterro} → razão H/V = {razao_aterro:.1f}
     </div>
     <table>
         <thead><tr><th>Talude</th><th>Volume</th></tr></thead>
@@ -305,36 +309,26 @@ def _gerar_memoria_de_calculo(
         </tbody>
     </table>
     <p style="font-size:10px;color:#757575;margin-top:4px;">
-        <em>Volumes de talude somados aos volumes brutos antes da aplica\u00e7\u00e3o dos fatores DNIT.</em>
+        <em>Volumes de talude somados aos volumes de plataforma.</em>
     </p>
 
-    <p><strong>5. Aplica\u00e7\u00e3o dos Fatores DNIT</strong></p>
+    <p><strong>5. Balanço de Massa (geométrico)</strong></p>
     <div style="background:var(--cinza-bg);padding:10px 14px;border-radius:4px;font-family:monospace;font-size:11px;margin:8px 0;">
-        Fator de Empolamento ({norma_cortes}): &nbsp;&nbsp;f<sub>e</sub> = {fe}<br>
-        Fator de Homogeneiza\u00e7\u00e3o ({norma_aterros}): f<sub>h</sub> = {fh}<br><br>
-        V<sub>corte_empolado</sub> &nbsp;&nbsp;&nbsp;= V<sub>corte_bruto</sub> \u00d7 f<sub>e</sub> = {r.volume_corte_bruto:,.2f} \u00d7 {fe} = <strong>{r.volume_corte_empolado:,.2f} {_M3}</strong><br>
-        V<sub>aterro_compactado</sub> = V<sub>aterro_bruto</sub> \u00d7 f<sub>h</sub> = {r.volume_aterro_bruto:,.2f} \u00d7 {fh} = <strong>{r.volume_aterro_compactado:,.2f} {_M3}</strong>
-    </div>
-
-    <p><strong>6. Balan\u00e7o de Massa</strong></p>
-    <div style="background:var(--cinza-bg);padding:10px 14px;border-radius:4px;font-family:monospace;font-size:11px;margin:8px 0;">
-        Balan\u00e7o = V<sub>corte_empolado</sub> \u2212 V<sub>aterro_compactado</sub><br>
-        Balan\u00e7o = {r.volume_corte_empolado:,.2f} \u2212 {r.volume_aterro_compactado:,.2f} = <strong>{r.balanco_massa:,.2f} {_M3}</strong><br><br>
+        Balanço = V<sub>corte</sub> − V<sub>aterro</sub><br>
+        Balanço = {r.volume_corte:,.2f} − {r.volume_aterro:,.2f} = <strong>{r.balanco_massa:,.2f} {_M3}</strong><br><br>
         {linha_bota}<br>
         {linha_import}
     </div>
 
-    <p><strong>7. Resumo Final</strong></p>
+    <p><strong>6. Resumo Final</strong></p>
     <table>
         <thead><tr><th>Grandeza</th><th>Valor</th><th>Unidade</th></tr></thead>
         <tbody>
-            <tr><td>Corte bruto (in-situ)</td><td>{r.volume_corte_bruto:,.2f}</td><td>{_M3}</td></tr>
-            <tr><td>Aterro bruto (in-situ)</td><td>{r.volume_aterro_bruto:,.2f}</td><td>{_M3}</td></tr>
-            <tr><td>Corte empolado</td><td>{r.volume_corte_empolado:,.2f}</td><td>{_M3}</td></tr>
-            <tr><td>Aterro compactado</td><td>{r.volume_aterro_compactado:,.2f}</td><td>{_M3}</td></tr>
+            <tr><td>Corte (geométrico)</td><td>{r.volume_corte:,.2f}</td><td>{_M3}</td></tr>
+            <tr><td>Aterro (geométrico)</td><td>{r.volume_aterro:,.2f}</td><td>{_M3}</td></tr>
             <tr><td>Bota-fora</td><td>{r.volume_bota_fora:,.2f}</td><td>{_M3}</td></tr>
             <tr><td>Solo importado</td><td>{r.volume_solo_importado:,.2f}</td><td>{_M3}</td></tr>
-            <tr><td>Remo\u00e7\u00e3o vegetal</td><td>{r.volume_remocao_vegetal:,.2f}</td><td>{_M3}</td></tr>
+            <tr><td>Remoção vegetal</td><td>{r.volume_remocao_vegetal:,.2f}</td><td>{_M3}</td></tr>
         </tbody>
     </table>
     <hr style="margin:20px 0;border:none;border-top:1px dashed var(--cinza-borda);">"""
@@ -346,13 +340,13 @@ def _gerar_memoria_de_calculo(
 def gerar_relatorio_gerencial(
     resultados: List[ResultadoVolume],
     parametros: ParametrosPadrao,
-    titulo: str = "Relat\u00f3rio Gerencial de Terraplenagem",
+    titulo: str = "Relatório Gerencial de Terraplenagem",
 ) -> str:
     """Gera relatorio HTML gerencial (resumo executivo com KPIs)."""
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    total_corte = sum(r.volume_corte_empolado for r in resultados)
-    total_aterro = sum(r.volume_aterro_compactado for r in resultados)
+    total_corte = sum(r.volume_corte for r in resultados)
+    total_aterro = sum(r.volume_aterro for r in resultados)
     total_bota = sum(r.volume_bota_fora for r in resultados)
     total_import = sum(r.volume_solo_importado for r in resultados)
     total_area = sum(r.area_total for r in resultados)
@@ -373,7 +367,7 @@ def gerar_relatorio_gerencial(
     else:
         semaforo_cls = "vermelho-bg"
         semaforo_icone = _ICONE_ERRO
-        semaforo_label = "D\u00e9ficit de Material"
+        semaforo_label = "Déficit de Material"
         semaforo_detalhe = "Solo importado: {:,.1f} {}".format(total_import, _M3)
 
     # Semaforo secundarios
@@ -382,11 +376,6 @@ def gerar_relatorio_gerencial(
     import_cls = "vermelho-bg" if total_import > 0 else "verde-bg"
     import_icone = _ICONE_ERRO if total_import > 0 else _ICONE_CHECK
 
-    cat_nome = NOMES_CATEGORIA[parametros.categoria_solo]
-    fator_emp = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].empolamento
-    fator_hom = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].homogeneizacao
-    norma_cortes = NORMAS_REFERENCIA["cortes"]
-    norma_aterros = NORMAS_REFERENCIA["aterros"]
     normas_todas = ", ".join(NORMAS_REFERENCIA.values())
 
     html = f"""<!DOCTYPE html>
@@ -400,31 +389,32 @@ def gerar_relatorio_gerencial(
 <body>
 <div class="header">
     <h1>{titulo}</h1>
-    <div class="subtitulo">Resumo Executivo - {num_poly} pol\u00edgono(s) analisado(s)</div>
+    <div class="subtitulo">Resumo Executivo - {num_poly} polígono(s) analisado(s)</div>
     <div class="meta">Gerado em {agora}</div>
     <div class="tipo-doc">Memorial Gerencial</div>
 </div>
 
 <div class="secao">
     <h2>Indicadores Gerais</h2>
+    <p style="font-size:11px;color:#757575;">{_NOTA_GEOMETRICO}</p>
     <div class="cards">
         <div class="card">
-            <div class="rotulo">\u00c1rea Total</div>
+            <div class="rotulo">Área Total</div>
             <div class="valor">{total_area:,.0f}</div>
             <div class="unidade">{_M2}</div>
         </div>
         <div class="card vermelho">
-            <div class="rotulo">Corte Empolado</div>
+            <div class="rotulo">Corte (Geométrico)</div>
             <div class="valor">{total_corte:,.1f}</div>
             <div class="unidade">{_M3}</div>
         </div>
         <div class="card">
-            <div class="rotulo">Aterro Compactado</div>
+            <div class="rotulo">Aterro (Geométrico)</div>
             <div class="valor">{total_aterro:,.1f}</div>
             <div class="unidade">{_M3}</div>
         </div>
         <div class="card laranja">
-            <div class="rotulo">Balan\u00e7o</div>
+            <div class="rotulo">Balanço</div>
             <div class="valor">{balanco_total:,.1f}</div>
             <div class="unidade">{_M3}</div>
         </div>
@@ -450,50 +440,48 @@ def gerar_relatorio_gerencial(
 </div>
 
 <div class="secao">
-    <h2>Par\u00e2metros Utilizados</h2>
+    <h2>Parâmetros Utilizados</h2>
     <table>
         <thead><tr>
-            <th>Par\u00e2metro</th><th>Valor</th><th>Refer\u00eancia</th>
+            <th>Parâmetro</th><th>Valor</th><th>Referência</th>
         </tr></thead>
         <tbody>
-            <tr><td>Categoria do Solo</td><td>{cat_nome}</td><td>DNIT</td></tr>
-            <tr><td>Fator Empolamento</td><td>{fator_emp}</td><td>{norma_cortes}</td></tr>
-            <tr><td>Fator Homogeneiza\u00e7\u00e3o</td><td>{fator_hom}</td><td>{norma_aterros}</td></tr>
-            <tr><td>Remo\u00e7\u00e3o Vegetal</td><td>{parametros.remocao_vegetal:.2f} m</td><td>Premissa</td></tr>
+            <tr><td>Volumes</td><td>Geométricos (in-situ), sem fatores de material</td><td>Premissa</td></tr>
+            <tr><td>Remoção Vegetal</td><td>{parametros.remocao_vegetal:.2f} m</td><td>Premissa</td></tr>
             <tr><td>Talude de Corte</td><td>{descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)}</td><td>Premissa</td></tr>
             <tr><td>Talude de Aterro</td><td>{descricao_talude(parametros.talude_aterro_h, parametros.talude_aterro_v)}</td><td>Premissa</td></tr>
-            <tr><td>Espa\u00e7amento da Grade</td><td>{parametros.espacamento_grade:.1f} m</td><td>Premissa</td></tr>
+            <tr><td>Espaçamento da Grade</td><td>{parametros.espacamento_grade:.1f} m</td><td>Premissa</td></tr>
         </tbody>
     </table>
 </div>
 
 <div class="secao">
-    <h2>Resumo por Pol\u00edgono</h2>
+    <h2>Resumo por Polígono</h2>
     <div class="tabela-container">
     <table>
         <thead><tr>
-            <th>Pol\u00edgono</th><th>Cota (m)</th><th>\u00c1rea ({_M2})</th>
+            <th>Polígono</th><th>Cota (m)</th><th>Área ({_M2})</th>
             <th>Corte ({_M3})</th><th>Aterro ({_M3})</th>
             <th>Bota-fora ({_M3})</th><th>Solo Import. ({_M3})</th><th>Status</th>
         </tr></thead>
         <tbody>"""
 
     for r in resultados:
-        corte_ref = r.volume_corte_empolado if r.volume_corte_empolado > 0 else 1.0
+        corte_ref = r.volume_corte if r.volume_corte > 0 else 1.0
         if abs(r.balanco_massa) < corte_ref * 0.05:
             badge_cls, badge_txt = "ok", "Equilibrado"
         elif r.volume_bota_fora > 0:
             badge_cls, badge_txt = "atencao", "Exc. Corte"
         else:
-            badge_cls, badge_txt = "critico", "D\u00e9ficit"
+            badge_cls, badge_txt = "critico", "Déficit"
 
         html += f"""
             <tr>
                 <td>{r.nome_poligono}</td>
                 <td>{r.cota_projeto:.2f}</td>
                 <td>{r.area_total:,.0f}</td>
-                <td>{r.volume_corte_empolado:,.1f}</td>
-                <td>{r.volume_aterro_compactado:,.1f}</td>
+                <td>{r.volume_corte:,.1f}</td>
+                <td>{r.volume_aterro:,.1f}</td>
                 <td>{r.volume_bota_fora:,.1f}</td>
                 <td>{r.volume_solo_importado:,.1f}</td>
                 <td><span class="badge {badge_cls}">{badge_txt}</span></td>
@@ -506,7 +494,7 @@ def gerar_relatorio_gerencial(
 </div>
 
 <div class="footer">
-    Relat\u00f3rio gerado automaticamente | Normas: {normas_todas} | {agora}
+    Relatório gerado automaticamente | Volumes geométricos (in-situ) | Normas: {normas_todas} | {agora}
 </div>
 {_JS_FILTRO}
 </body>
@@ -519,17 +507,12 @@ def gerar_relatorio_analitico(
     resultados: List[ResultadoVolume],
     figuras: Dict[str, go.Figure],
     parametros: ParametrosPadrao,
-    titulo: str = "Relat\u00f3rio Anal\u00edtico de Terraplenagem",
+    titulo: str = "Relatório Analítico de Terraplenagem",
 ) -> str:
     """Gera relatorio HTML analitico completo com graficos Plotly."""
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     num_poly = len(resultados)
 
-    cat_nome = NOMES_CATEGORIA[parametros.categoria_solo]
-    fator_emp = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].empolamento
-    fator_hom = FATORES_DNIT[_resolver_categoria(parametros.categoria_solo)].homogeneizacao
-    norma_cortes = NORMAS_REFERENCIA["cortes"]
-    norma_aterros = NORMAS_REFERENCIA["aterros"]
     normas_todas = ", ".join(NORMAS_REFERENCIA.values())
 
     html = f"""<!DOCTYPE html>
@@ -543,20 +526,19 @@ def gerar_relatorio_analitico(
 <body>
 <div class="header">
     <h1>{titulo}</h1>
-    <div class="subtitulo">Relat\u00f3rio T\u00e9cnico Completo - {num_poly} pol\u00edgono(s)</div>
+    <div class="subtitulo">Relatório Técnico Completo - {num_poly} polígono(s)</div>
     <div class="meta">Gerado em {agora}</div>
-    <div class="tipo-doc">Memorial Anal\u00edtico</div>
+    <div class="tipo-doc">Memorial Analítico</div>
 </div>
 
 <div class="secao">
-    <h2>Par\u00e2metros T\u00e9cnicos</h2>
+    <h2>Parâmetros Técnicos</h2>
+    <p style="font-size:11px;color:#757575;">{_NOTA_GEOMETRICO}</p>
     <table>
-        <thead><tr><th>Par\u00e2metro</th><th>Valor</th><th>Norma</th></tr></thead>
+        <thead><tr><th>Parâmetro</th><th>Valor</th><th>Norma</th></tr></thead>
         <tbody>
-            <tr><td>Categoria</td><td>{cat_nome}</td><td>DNIT</td></tr>
-            <tr><td>Empolamento</td><td>{fator_emp}</td><td>{norma_cortes}</td></tr>
-            <tr><td>Homogeneiza\u00e7\u00e3o</td><td>{fator_hom}</td><td>{norma_aterros}</td></tr>
-            <tr><td>Remo\u00e7\u00e3o Vegetal</td><td>{parametros.remocao_vegetal:.2f} m</td><td>-</td></tr>
+            <tr><td>Volumes</td><td>Geométricos (in-situ)</td><td>-</td></tr>
+            <tr><td>Remoção Vegetal</td><td>{parametros.remocao_vegetal:.2f} m</td><td>-</td></tr>
             <tr><td>Talude Corte</td><td>{descricao_talude(parametros.talude_corte_h, parametros.talude_corte_v)}</td><td>-</td></tr>
             <tr><td>Talude Aterro</td><td>{descricao_talude(parametros.talude_aterro_h, parametros.talude_aterro_v)}</td><td>-</td></tr>
         </tbody>
@@ -564,7 +546,7 @@ def gerar_relatorio_analitico(
 </div>"""
 
     # Graficos (excluindo os removidos do analitico)
-    _graficos_excluidos = {"3D Compara\u00e7\u00e3o", "Diagrama de Br\u00fcckner", "Volumes por Pol\u00edgono"}
+    _graficos_excluidos = {"3D Comparação", "Diagrama de Brückner", "Volumes por Polígono"}
     primeiro_grafico = True
     for nome, fig in figuras.items():
         if any(nome.startswith(excl) for excl in _graficos_excluidos):
@@ -586,18 +568,17 @@ def gerar_relatorio_analitico(
     # Tabela detalhada
     html += """
 <div class="secao">
-    <h2>Detalhamento por Pol\u00edgono</h2>
+    <h2>Detalhamento por Polígono</h2>
     <div class="tabela-container">
     <table>
         <thead><tr>
-            <th>Pol\u00edgono</th><th>Cota (m)</th><th>Elev. M\u00e9dia (m)</th>
-            <th>\u00c1rea (m\u00b2)</th><th>\u00c1rea Corte (m\u00b2)</th><th>\u00c1rea Aterro (m\u00b2)</th>
-            <th>Corte Bruto (m\u00b3)</th><th>Aterro Bruto (m\u00b3)</th>
-            <th>Corte Empolado (m\u00b3)</th><th>Aterro Compact. (m\u00b3)</th>
-            <th>Bota-fora (m\u00b3)</th><th>Solo Import. (m\u00b3)</th>
-            <th>Balan\u00e7o (m\u00b3)</th>
-            <th>Rem. Vegetal (m\u00b3)</th>
-            <th>Talude Corte (m\u00b3)</th><th>Talude Aterro (m\u00b3)</th>
+            <th>Polígono</th><th>Cota (m)</th><th>Elev. Média (m)</th>
+            <th>Área (m²)</th><th>Área Corte (m²)</th><th>Área Aterro (m²)</th>
+            <th>Corte (m³)</th><th>Aterro (m³)</th>
+            <th>Bota-fora (m³)</th><th>Solo Import. (m³)</th>
+            <th>Balanço (m³)</th>
+            <th>Rem. Vegetal (m³)</th>
+            <th>Talude Corte (m³)</th><th>Talude Aterro (m³)</th>
         </tr></thead>
         <tbody>"""
 
@@ -610,10 +591,8 @@ def gerar_relatorio_analitico(
                 <td>{r.area_total:,.0f}</td>
                 <td>{r.area_corte:,.0f}</td>
                 <td>{r.area_aterro:,.0f}</td>
-                <td>{r.volume_corte_bruto:,.2f}</td>
-                <td>{r.volume_aterro_bruto:,.2f}</td>
-                <td>{r.volume_corte_empolado:,.2f}</td>
-                <td>{r.volume_aterro_compactado:,.2f}</td>
+                <td>{r.volume_corte:,.2f}</td>
+                <td>{r.volume_aterro:,.2f}</td>
                 <td>{r.volume_bota_fora:,.2f}</td>
                 <td>{r.volume_solo_importado:,.2f}</td>
                 <td>{r.balanco_massa:,.2f}</td>
@@ -626,10 +605,8 @@ def gerar_relatorio_analitico(
     t_area = sum(r.area_total for r in resultados)
     t_ac = sum(r.area_corte for r in resultados)
     t_aa = sum(r.area_aterro for r in resultados)
-    t_cb = sum(r.volume_corte_bruto for r in resultados)
-    t_ab = sum(r.volume_aterro_bruto for r in resultados)
-    t_ce = sum(r.volume_corte_empolado for r in resultados)
-    t_acomp = sum(r.volume_aterro_compactado for r in resultados)
+    t_corte = sum(r.volume_corte for r in resultados)
+    t_aterro = sum(r.volume_aterro for r in resultados)
     t_bf = sum(r.volume_bota_fora for r in resultados)
     t_si = sum(r.volume_solo_importado for r in resultados)
     t_bal = sum(r.balanco_massa for r in resultados)
@@ -644,10 +621,8 @@ def gerar_relatorio_analitico(
                 <td>{t_area:,.0f}</td>
                 <td>{t_ac:,.0f}</td>
                 <td>{t_aa:,.0f}</td>
-                <td>{t_cb:,.2f}</td>
-                <td>{t_ab:,.2f}</td>
-                <td>{t_ce:,.2f}</td>
-                <td>{t_acomp:,.2f}</td>
+                <td>{t_corte:,.2f}</td>
+                <td>{t_aterro:,.2f}</td>
                 <td>{t_bf:,.2f}</td>
                 <td>{t_si:,.2f}</td>
                 <td>{t_bal:,.2f}</td>
@@ -661,7 +636,7 @@ def gerar_relatorio_analitico(
 </div>
 
 <div class="footer">
-    Relat\u00f3rio gerado automaticamente | Normas: {normas_todas} | {agora}
+    Relatório gerado automaticamente | Volumes geométricos (in-situ) | Normas: {normas_todas} | {agora}
 </div>
 {_JS_FILTRO}
 </body>

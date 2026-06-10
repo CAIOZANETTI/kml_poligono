@@ -676,13 +676,13 @@ def criar_grafico_barras_volumes(
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name="Corte empolado", x=nomes,
-        y=[r.volume_corte_empolado for r in resultados],
+        name="Corte (geométrico)", x=nomes,
+        y=[r.volume_corte for r in resultados],
         marker_color=CORES["corte"],
     ))
     fig.add_trace(go.Bar(
-        name="Aterro compactado", x=nomes,
-        y=[r.volume_aterro_compactado for r in resultados],
+        name="Aterro (geométrico)", x=nomes,
+        y=[r.volume_aterro for r in resultados],
         marker_color=CORES["aterro"],
     ))
     fig.add_trace(go.Bar(

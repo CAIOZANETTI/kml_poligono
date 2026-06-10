@@ -13,7 +13,6 @@ from modulos.visualizacao import (
 from modulos.relatorio import gerar_relatorio_html
 from modulos.volumes import calcular_volumes_por_faixas
 from modulos.bruckner import construir_diagrama_bruckner
-from modulos.parametros import NOMES_CATEGORIA, obter_fator_empolamento, obter_fator_homogeneizacao
 
 pagina_requer_dados()
 dados = obter_dados()
@@ -29,7 +28,6 @@ grades = dados["grades"]
 cotas = dados["cotas"]
 remocao_vegetal = dados["remocao_vegetal"]
 espacamento = dados["espacamento"]
-categoria = dados["categoria_solo"]
 
 figuras = {}
 for nome in nomes:
@@ -50,14 +48,9 @@ for nome in nomes:
         superficies[nome], cotas[nome], espacamento,
         num_faixas=num_faixas_export,
         remocao_vegetal=remocao_vegetal,
-        categoria=categoria,
     )
     if faixas_brk:
-        resultado_brk = construir_diagrama_bruckner(
-            faixas_brk,
-            fator_empolamento=obter_fator_empolamento(categoria),
-            fator_homogeneizacao=obter_fator_homogeneizacao(categoria),
-        )
+        resultado_brk = construir_diagrama_bruckner(faixas_brk)
         figuras["Diagrama de Br\u00fcckner \u2014 {}".format(nome)] = plotar_bruckner(resultado_brk)
 
 figuras["Volumes por Pol\u00edgono"] = criar_grafico_barras_volumes(lista_res)
@@ -95,10 +88,8 @@ with pd.ExcelWriter(buffer_xlsx, engine="openpyxl") as writer:
             "Area Total (m\u00b2)": r.area_total,
             "Area Corte (m\u00b2)": r.area_corte,
             "Area Aterro (m\u00b2)": r.area_aterro,
-            "Corte Bruto (m\u00b3)": r.volume_corte_bruto,
-            "Aterro Bruto (m\u00b3)": r.volume_aterro_bruto,
-            "Corte Empolado (m\u00b3)": r.volume_corte_empolado,
-            "Aterro Compactado (m\u00b3)": r.volume_aterro_compactado,
+            "Corte Geometrico (m\u00b3)": r.volume_corte,
+            "Aterro Geometrico (m\u00b3)": r.volume_aterro,
             "Bota-fora (m\u00b3)": r.volume_bota_fora,
             "Solo Importado (m\u00b3)": r.volume_solo_importado,
             "Balanco (m\u00b3)": r.balanco_massa,
@@ -106,7 +97,6 @@ with pd.ExcelWriter(buffer_xlsx, engine="openpyxl") as writer:
             "Vol. Remocao Vegetal (m\u00b3)": r.volume_remocao_vegetal,
             "Vol. Talude Corte (m\u00b3)": r.volume_talude_corte,
             "Vol. Talude Aterro (m\u00b3)": r.volume_talude_aterro,
-            "Categoria Solo": NOMES_CATEGORIA[r.categoria_solo],
         }
         for r in lista_res
     ])
@@ -117,7 +107,6 @@ with pd.ExcelWriter(buffer_xlsx, engine="openpyxl") as writer:
         faixas = calcular_volumes_por_faixas(
             superficies[nome], cotas[nome], espacamento,
             num_faixas=num_faixas_export, remocao_vegetal=remocao_vegetal,
-            categoria=categoria,
         )
         for f in faixas:
             f["poligono"] = nome

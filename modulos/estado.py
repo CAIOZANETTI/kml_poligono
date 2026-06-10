@@ -15,9 +15,7 @@ from modulos.elevacao import completar_elevacao_poligono, obter_elevacao_grade_d
 from modulos.geometria import processar_poligono, utm_para_latlon, GradePoligono
 from modulos.terreno import interpolar_terreno, SuperficieTerreno
 from modulos.volumes import calcular_volumes, ResultadoVolume
-from modulos.parametros import (
-    ParametrosPadrao, CategoriaSolo, _resolver_categoria,
-)
+from modulos.parametros import ParametrosPadrao
 
 
 # ─── Serializacao JSON ───
@@ -128,10 +126,8 @@ def _serializar_resultado(r: ResultadoVolume) -> dict:
         "nome_poligono": r.nome_poligono,
         "cota_projeto": r.cota_projeto,
         "area_total": r.area_total,
-        "volume_corte_bruto": r.volume_corte_bruto,
-        "volume_aterro_bruto": r.volume_aterro_bruto,
-        "volume_corte_empolado": r.volume_corte_empolado,
-        "volume_aterro_compactado": r.volume_aterro_compactado,
+        "volume_corte": r.volume_corte,
+        "volume_aterro": r.volume_aterro,
         "volume_bota_fora": r.volume_bota_fora,
         "volume_solo_importado": r.volume_solo_importado,
         "balanco_massa": r.balanco_massa,
@@ -139,7 +135,6 @@ def _serializar_resultado(r: ResultadoVolume) -> dict:
         "area_aterro": r.area_aterro,
         "elevacao_media_terreno": r.elevacao_media_terreno,
         "remocao_vegetal": r.remocao_vegetal,
-        "categoria_solo": r.categoria_solo.value if isinstance(r.categoria_solo, CategoriaSolo) else r.categoria_solo,
         "volume_remocao_vegetal": r.volume_remocao_vegetal,
         "area_total_poligono": r.area_total_poligono,
         "volume_talude_corte": r.volume_talude_corte,
@@ -152,10 +147,8 @@ def _desserializar_resultado(d: dict) -> ResultadoVolume:
         nome_poligono=d["nome_poligono"],
         cota_projeto=d["cota_projeto"],
         area_total=d["area_total"],
-        volume_corte_bruto=d["volume_corte_bruto"],
-        volume_aterro_bruto=d["volume_aterro_bruto"],
-        volume_corte_empolado=d["volume_corte_empolado"],
-        volume_aterro_compactado=d["volume_aterro_compactado"],
+        volume_corte=d["volume_corte"],
+        volume_aterro=d["volume_aterro"],
         volume_bota_fora=d["volume_bota_fora"],
         volume_solo_importado=d["volume_solo_importado"],
         balanco_massa=d["balanco_massa"],
@@ -163,7 +156,6 @@ def _desserializar_resultado(d: dict) -> ResultadoVolume:
         area_aterro=d["area_aterro"],
         elevacao_media_terreno=d["elevacao_media_terreno"],
         remocao_vegetal=d["remocao_vegetal"],
-        categoria_solo=_resolver_categoria(d["categoria_solo"]),
         volume_remocao_vegetal=d.get("volume_remocao_vegetal", 0.0),
         area_total_poligono=d.get("area_total_poligono", 0.0),
         volume_talude_corte=d.get("volume_talude_corte", 0.0),
@@ -179,7 +171,6 @@ def _serializar_parametros(p: ParametrosPadrao) -> dict:
         "talude_corte_v": p.talude_corte_v,
         "talude_aterro_h": p.talude_aterro_h,
         "talude_aterro_v": p.talude_aterro_v,
-        "categoria_solo": p.categoria_solo.value if isinstance(p.categoria_solo, CategoriaSolo) else p.categoria_solo,
     }
 
 
@@ -191,14 +182,13 @@ def _desserializar_parametros(d: dict) -> ParametrosPadrao:
         talude_corte_v=d["talude_corte_v"],
         talude_aterro_h=d["talude_aterro_h"],
         talude_aterro_v=d["talude_aterro_v"],
-        categoria_solo=_resolver_categoria(d["categoria_solo"]),
     )
 
 
 # ─── Salvar / Carregar dados processados ───
 
 def salvar_dados_sessao(poligonos, grades, superficies, resultados, cotas, parametros,
-                        espacamento, remocao_vegetal, categoria_solo):
+                        espacamento, remocao_vegetal):
     """Serializa todos os dados processados em JSON e salva no session_state."""
     dados_json = {
         "poligonos": [_serializar_poligono_kml(p) for p in poligonos],
@@ -209,7 +199,6 @@ def salvar_dados_sessao(poligonos, grades, superficies, resultados, cotas, param
         "parametros": _serializar_parametros(parametros),
         "espacamento": espacamento,
         "remocao_vegetal": remocao_vegetal,
-        "categoria_solo": categoria_solo.value if isinstance(categoria_solo, CategoriaSolo) else categoria_solo,
     }
     st.session_state["dados_json"] = dados_json
     # Invalida o cache de objetos desserializados
@@ -244,7 +233,6 @@ def carregar_dados_sessao():
         "parametros": _desserializar_parametros(dados_json["parametros"]),
         "espacamento": dados_json["espacamento"],
         "remocao_vegetal": dados_json["remocao_vegetal"],
-        "categoria_solo": _resolver_categoria(dados_json["categoria_solo"]),
     }
     st.session_state["_dados_obj_cache"] = (versao, dados)
     return dados
@@ -268,7 +256,6 @@ def processar_poligonos():
 
     espacamento = st.session_state.get("espacamento", 10.0)
     remocao_vegetal = st.session_state.get("remocao_vegetal", 0.30)
-    categoria_solo = st.session_state.get("categoria_solo", CategoriaSolo.PRIMEIRA)
 
     # Parse KML a partir dos bytes salvos
     todos_poligonos = []
@@ -347,7 +334,7 @@ def processar_poligonos():
         cotas[poly.nome] = cota_input
         resultados[poly.nome] = calcular_volumes(
             superficie, cota_input, espacamento,
-            remocao_vegetal, categoria_solo, poly.nome,
+            remocao_vegetal, poly.nome,
             talude_corte_h=parametros.talude_corte_h,
             talude_corte_v=parametros.talude_corte_v,
             talude_aterro_h=parametros.talude_aterro_h,
@@ -361,7 +348,7 @@ def processar_poligonos():
     # Salva como JSON no session_state
     salvar_dados_sessao(
         poligonos_processados, grades, superficies, resultados, cotas,
-        parametros, espacamento, remocao_vegetal, categoria_solo,
+        parametros, espacamento, remocao_vegetal,
     )
 
     return True
