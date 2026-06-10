@@ -24,4 +24,4 @@ fig = criar_mapa_contorno(
     cota_projeto=dados["cotas"][nome],
     equidistancia=equidistancia,
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")

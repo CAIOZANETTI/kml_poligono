@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 import numpy as np
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon
 import shapely
 import utm as utm_lib
 
@@ -87,8 +87,22 @@ def gerar_grade_interna(
 
     Returns:
         np.ndarray shape (M, 2) com easting/northing dos pontos internos.
+
+    Raises:
+        ValueError: Se a combinacao area x espacamento gerar uma grade
+            grande demais para processar com seguranca.
     """
     minx, miny, maxx, maxy = poligono.bounds
+
+    # Guarda de memoria: grades com milhoes de pontos travam a aplicacao
+    n_estimado = ((maxx - minx) / espacamento + 1) * ((maxy - miny) / espacamento + 1)
+    if n_estimado > 4_000_000:
+        raise ValueError(
+            "Grade de ~{:,.0f} pontos excede o limite de 4 milhoes. "
+            "Aumente o espacamento da grade (atual: {} m).".format(
+                n_estimado, espacamento,
+            )
+        )
 
     # Cria grade regular
     xs = np.arange(minx, maxx + espacamento, espacamento)
@@ -127,6 +141,13 @@ def processar_poligono(
 
     # Cria poligono Shapely
     poly = criar_poligono_shapely(pontos_utm)
+    if not poly.is_valid:
+        raise ValueError(
+            "Poligono '{}' e invalido (provavel auto-intersecao no desenho). "
+            "Corrija o tracado no Google Earth e reimporte o KML.".format(
+                poligono_kml.nome,
+            )
+        )
 
     # Array de pontos da borda com elevacao
     pontos_borda = np.array([
@@ -148,6 +169,33 @@ def processar_poligono(
         area=calcular_area_poligono(poly),
         perimetro=calcular_perimetro(poly),
     )
+
+
+def utm_para_latlon(
+    pontos_xy: np.ndarray,
+    zona: int,
+    letra: str,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Converte pontos UTM (easting, northing) de volta para lat/lon.
+
+    Args:
+        pontos_xy: Array (M, 2) com easting/northing.
+        zona: Numero da zona UTM.
+        letra: Letra da zona UTM.
+
+    Returns:
+        (latitudes, longitudes) como arrays float.
+    """
+    n = len(pontos_xy)
+    lats = np.empty(n)
+    lons = np.empty(n)
+    for i in range(n):
+        lat, lon = utm_lib.to_latlon(
+            float(pontos_xy[i, 0]), float(pontos_xy[i, 1]), zona, letra,
+        )
+        lats[i] = lat
+        lons[i] = lon
+    return lats, lons
 
 
 def calcular_area_poligono(poligono: Polygon) -> float:

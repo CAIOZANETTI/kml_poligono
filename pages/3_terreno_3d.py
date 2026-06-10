@@ -52,7 +52,7 @@ fig = criar_greide_3d(
     superficie, grade, tal, cota_projeto=cota,
     titulo="Greide — {}".format(nome), exagero_vertical=exagero,
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # ── Metricas: footprint e volumes (interno + talude) ──
 ci, ai = volumes_internos(superficie, cota, grade.espacamento, remocao)
@@ -102,7 +102,7 @@ with st.expander("Cota ótima do platô (varredura)", expanded=False):
         legend=dict(orientation="h", y=1.12),
         margin=dict(l=40, r=20, b=40, t=30),
     )
-    st.plotly_chart(figv, use_container_width=True)
+    st.plotly_chart(figv, width="stretch")
     c1, c2 = st.columns(2)
     c1.metric("Cota de menor volume total", "{:.2f} m".format(vr["cota_min_total"]))
     c2.metric("Cota de equilíbrio corte≈aterro", "{:.2f} m".format(vr["cota_equilibrio"]))

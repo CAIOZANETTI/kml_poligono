@@ -11,15 +11,12 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from modulos.leitor_kml import ler_arquivo_kml, PoligonoKML, PontoKML
-from modulos.elevacao import completar_elevacao_poligono
-from modulos.geometria import processar_poligono, GradePoligono
+from modulos.elevacao import completar_elevacao_poligono, obter_elevacao_grade_dem
+from modulos.geometria import processar_poligono, utm_para_latlon, GradePoligono
 from modulos.terreno import interpolar_terreno, SuperficieTerreno
-from modulos.volumes import (
-    calcular_volumes, calcular_cota_otima, ResultadoVolume,
-)
+from modulos.volumes import calcular_volumes, ResultadoVolume
 from modulos.parametros import (
-    ParametrosPadrao, CategoriaSolo, NOMES_CATEGORIA, FATORES_DNIT,
-    _resolver_categoria,
+    ParametrosPadrao, CategoriaSolo, _resolver_categoria,
 )
 
 
@@ -215,10 +212,16 @@ def salvar_dados_sessao(poligonos, grades, superficies, resultados, cotas, param
         "categoria_solo": categoria_solo.value if isinstance(categoria_solo, CategoriaSolo) else categoria_solo,
     }
     st.session_state["dados_json"] = dados_json
+    # Invalida o cache de objetos desserializados
+    st.session_state["dados_versao"] = st.session_state.get("dados_versao", 0) + 1
+    st.session_state.pop("_dados_obj_cache", None)
 
 
 def carregar_dados_sessao():
     """Desserializa dados JSON do session_state para objetos Python.
+
+    O resultado e cacheado por versao dos dados: reruns do Streamlit em uma
+    mesma sessao nao pagam o custo de reconstruir todos os arrays.
 
     Returns:
         dict com objetos reconstruidos ou None se nao ha dados.
@@ -227,7 +230,12 @@ def carregar_dados_sessao():
     if not dados_json:
         return None
 
-    return {
+    versao = st.session_state.get("dados_versao", 0)
+    cache = st.session_state.get("_dados_obj_cache")
+    if cache is not None and cache[0] == versao:
+        return cache[1]
+
+    dados = {
         "poligonos": [_desserializar_poligono_kml(p) for p in dados_json["poligonos"]],
         "grades": {k: _desserializar_grade(v) for k, v in dados_json["grades"].items()},
         "superficies": {k: _desserializar_superficie(v) for k, v in dados_json["superficies"].items()},
@@ -238,6 +246,8 @@ def carregar_dados_sessao():
         "remocao_vegetal": dados_json["remocao_vegetal"],
         "categoria_solo": _resolver_categoria(dados_json["categoria_solo"]),
     }
+    st.session_state["_dados_obj_cache"] = (versao, dados)
+    return dados
 
 
 # ─── Processamento ───
@@ -272,28 +282,66 @@ def processar_poligonos():
     if not todos_poligonos:
         return False
 
-    # Completar elevacao (sem Google API)
-    for i, poly in enumerate(todos_poligonos):
-        if not poly.tem_elevacao:
-            with st.spinner("Obtendo eleva\u00e7\u00e3o para '{}'...".format(poly.nome)):
-                try:
-                    todos_poligonos[i] = completar_elevacao_poligono(poly)
-                except ValueError as e:
-                    st.error(str(e))
+    # Completar elevacao (sem Google API). Poligono cuja elevacao falhou e
+    # DESCARTADO: processa-lo com cota 0 produziria volumes sem sentido.
+    elevacao_via_dem = set()
+    poligonos_validos = []
+    for poly in todos_poligonos:
+        if poly.tem_elevacao:
+            poligonos_validos.append(poly)
+            continue
+        with st.spinner("Obtendo eleva\u00e7\u00e3o para '{}'...".format(poly.nome)):
+            try:
+                poligonos_validos.append(completar_elevacao_poligono(poly))
+                elevacao_via_dem.add(poly.nome)
+            except ValueError as e:
+                st.error(
+                    "{} O pol\u00edgono foi ignorado.".format(e)
+                )
 
     # Processa cada poligono
     grades = {}
     superficies = {}
     resultados = {}
     cotas = {}
+    poligonos_processados = []
     parametros = st.session_state.get("parametros", ParametrosPadrao())
 
-    for poly in todos_poligonos:
-        grade = processar_poligono(poly, espacamento)
-        grades[poly.nome] = grade
+    for poly in poligonos_validos:
+        try:
+            grade = processar_poligono(poly, espacamento)
+        except ValueError as e:
+            st.error("{} O pol\u00edgono foi ignorado.".format(e))
+            continue
 
-        superficie = interpolar_terreno(grade)
+        if len(grade.pontos_grade) == 0:
+            st.warning(
+                "Pol\u00edgono '{}' n\u00e3o gerou pontos internos com espa\u00e7amento "
+                "de {} m (\u00e1rea de {:,.0f} m\u00b2). Reduza o espa\u00e7amento da "
+                "grade. O pol\u00edgono foi ignorado.".format(
+                    poly.nome, espacamento, grade.area,
+                )
+            )
+            continue
+
+        # Quando a elevacao da borda veio do DEM, amostra tambem os pontos
+        # internos da grade direto dos tiles (relevo interno real, em vez de
+        # interpolar so a partir da borda).
+        elevacao_interna = None
+        if poly.nome in elevacao_via_dem:
+            with st.spinner("Amostrando terreno interno de '{}' no DEM...".format(poly.nome)):
+                lats, lons = utm_para_latlon(
+                    grade.pontos_grade, grade.zona_utm, grade.letra_utm,
+                )
+                elevacao_interna = obter_elevacao_grade_dem(lats, lons)
+                if np.all(np.isnan(elevacao_interna)):
+                    elevacao_interna = None  # DEM indisponivel: usa so a borda
+
+        superficie = interpolar_terreno(grade, elevacao_grade_conhecida=elevacao_interna)
+
+        grades[poly.nome] = grade
         superficies[poly.nome] = superficie
+        poligonos_processados.append(poly)
 
         cota_input = superficie.elevacao_media
         cotas[poly.nome] = cota_input
@@ -307,9 +355,12 @@ def processar_poligonos():
             grade=grade,
         )
 
+    if not poligonos_processados:
+        return False
+
     # Salva como JSON no session_state
     salvar_dados_sessao(
-        todos_poligonos, grades, superficies, resultados, cotas,
+        poligonos_processados, grades, superficies, resultados, cotas,
         parametros, espacamento, remocao_vegetal, categoria_solo,
     )
 
@@ -322,11 +373,11 @@ def obter_dados():
 
 
 def seletor_poligono(key: str) -> str:
-    """Selectbox de poligono reutilizavel."""
-    dados = carregar_dados_sessao()
-    if not dados:
+    """Selectbox de poligono reutilizavel (le so os nomes, sem desserializar)."""
+    dados_json = st.session_state.get("dados_json")
+    if not dados_json:
         return ""
-    nomes = list(dados["resultados"].keys())
+    nomes = list(dados_json["resultados"].keys())
     if len(nomes) == 1:
         return nomes[0]
     return st.selectbox("Pol\u00edgono", nomes, key="sel_{}".format(key))

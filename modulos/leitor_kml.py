@@ -4,8 +4,8 @@ Usa xml.etree.ElementTree para parse (sem dependencia pesada de GDAL).
 Suporta multiplos namespaces KML (2.2, 2.1, Google Earth).
 """
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional
 import xml.etree.ElementTree as ET
 
 
@@ -89,13 +89,8 @@ def _extrair_poligonos_placemark(
     nome_elem = placemark.find(f"{ns_prefix}name")
     nome_base = nome_elem.text.strip() if nome_elem is not None and nome_elem.text else ""
 
-    # Busca Polygon direto
+    # Busca recursiva ja inclui poligonos dentro de MultiGeometry
     poligonos_xml = placemark.findall(f".//{ns_prefix}Polygon")
-
-    # Busca dentro de MultiGeometry
-    multi = placemark.find(f".//{ns_prefix}MultiGeometry")
-    if multi is not None:
-        poligonos_xml.extend(multi.findall(f".//{ns_prefix}Polygon"))
 
     for i, poly_xml in enumerate(poligonos_xml):
         # Pega o anel externo (outerBoundaryIs)
@@ -188,44 +183,3 @@ def ler_arquivo_kml(conteudo_bytes: bytes, nome_arquivo: str) -> List[PoligonoKM
     return poligonos
 
 
-def validar_poligono(poligono: PoligonoKML) -> Tuple[bool, str]:
-    """Valida que o poligono atende requisitos minimos.
-
-    Returns:
-        (valido, mensagem_erro)
-    """
-    if len(poligono.pontos) < 3:
-        return False, f"Poligono '{poligono.nome}' tem apenas {len(poligono.pontos)} pontos (minimo 3)."
-    return True, ""
-
-
-def ler_multiplos_arquivos(arquivos: list) -> List[PoligonoKML]:
-    """Le multiplos arquivos KML e retorna lista consolidada de poligonos.
-
-    Args:
-        arquivos: Lista de tuplas (conteudo_bytes, nome_arquivo).
-
-    Returns:
-        Lista consolidada de PoligonoKML de todos os arquivos.
-    """
-    todos_poligonos = []
-    nomes_globais = set()
-
-    for conteudo, nome in arquivos:
-        try:
-            poligonos = ler_arquivo_kml(conteudo, nome)
-            for p in poligonos:
-                # Garante unicidade global
-                nome_original = p.nome
-                sufixo = 1
-                while p.nome in nomes_globais:
-                    p.nome = f"{nome_original}_{sufixo}"
-                    sufixo += 1
-                nomes_globais.add(p.nome)
-                todos_poligonos.append(p)
-        except ValueError as e:
-            # Continua com outros arquivos, reporta erro
-            import streamlit as st
-            st.warning(str(e))
-
-    return todos_poligonos

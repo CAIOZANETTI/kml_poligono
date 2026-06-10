@@ -7,7 +7,7 @@ Referencia:
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Dict
 
@@ -100,13 +100,3 @@ def obter_fator_empolamento(categoria) -> float:
 def obter_fator_homogeneizacao(categoria) -> float:
     """Retorna o fator de homogeneizacao para a categoria de solo."""
     return FATORES_DNIT[_resolver_categoria(categoria)].homogeneizacao
-
-
-def obter_fator_compactacao(categoria) -> float:
-    """Retorna fator compactacao = empolamento * homogeneizacao.
-
-    Converte volume de corte in-situ para volume equivalente de aterro compactado.
-    """
-    cat = _resolver_categoria(categoria)
-    f = FATORES_DNIT[cat]
-    return f.empolamento * f.homogeneizacao

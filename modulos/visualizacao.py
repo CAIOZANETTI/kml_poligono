@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from typing import List, Optional
 
 from modulos.terreno import SuperficieTerreno
@@ -174,7 +173,6 @@ def _criar_terreno_3d(
     titulo: str,
     exagero_vertical: int,
     cota_referencia: Optional[float],
-    contornos: bool,
 ) -> go.Figure:
     """Terreno 3D em elevacao real, colorido por corte/aterro relativo a cota.
 
@@ -269,240 +267,13 @@ def criar_superficie_3d(
     exagero_vertical: int = 1,
     cota_referencia: Optional[float] = None,
 ) -> go.Figure:
-    """Visualizacao 3D do terreno natural (sem contornos projetados)."""
+    """Visualizacao 3D do terreno natural."""
     return _criar_terreno_3d(
         superficie, grade, titulo, exagero_vertical, cota_referencia,
-        contornos=False,
     )
-
-
-def criar_superficie_3d_contornos(
-    superficie: SuperficieTerreno,
-    grade: Optional[GradePoligono] = None,
-    titulo: str = "Terreno 3D (Contornos)",
-    exagero_vertical: int = 1,
-    cota_referencia: Optional[float] = None,
-) -> go.Figure:
-    """Surface 3D com contornos projetados no plano Z."""
-    return _criar_terreno_3d(
-        superficie, grade, titulo, exagero_vertical, cota_referencia,
-        contornos=True,
-    )
-
-
-def criar_plataforma_projeto_3d(
-    superficie: SuperficieTerreno,
-    grade: Optional[GradePoligono] = None,
-    cota_projeto: float = 0.0,
-    titulo: str = "Plataforma de Projeto",
-    exagero_vertical: int = 1,
-) -> go.Figure:
-    """Mostra o ESTADO DESEJADO: a plataforma plana (terreno terraplanado)
-    na cota de projeto, com o terreno natural por tras como referencia.
-    """
-    fig = go.Figure()
-    ox, oy = _offset_xy(superficie)
-
-    mx, my, z_terreno = _decimar(
-        superficie.malha_x - ox,
-        superficie.malha_y - oy,
-        superficie.elevacao_malha.astype(float),
-    )
-
-    # Terreno natural como referencia translucida (fantasma)
-    fig.add_trace(go.Surface(
-        x=mx, y=my, z=z_terreno,
-        colorscale=[[0, "rgba(120,120,120,1)"], [1, "rgba(120,120,120,1)"]],
-        opacity=0.18, showscale=False, name="Terreno natural",
-        connectgaps=False, hoverinfo="name",
-        lighting=dict(ambient=1.0, diffuse=0.0, specular=0.0),
-    ))
-
-    # Plataforma plana desejada: superficie solida na cota, recortada ao lote
-    z_plat = np.where(~np.isnan(z_terreno), float(cota_projeto), np.nan)
-    fig.add_trace(go.Surface(
-        x=mx, y=my, z=z_plat,
-        colorscale=[[0, CORES["accent"]], [1, CORES["accent"]]],
-        opacity=0.95, showscale=False, name="Plataforma de projeto",
-        connectgaps=False, hoverinfo="name",
-        lighting=dict(ambient=0.8, diffuse=0.5, specular=0.1),
-    ))
-
-    if grade is not None:
-        borda = grade.pontos_borda
-        borda_fechada = np.vstack([borda, borda[0:1]])
-        fig.add_trace(go.Scatter3d(
-            x=borda_fechada[:, 0] - ox,
-            y=borda_fechada[:, 1] - oy,
-            z=np.full(len(borda_fechada), float(cota_projeto)),
-            mode="lines",
-            line=dict(color=CORES["borda"], width=3),
-            name="Contorno do lote",
-        ))
-
-    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_terreno)))
-
-    z_label = "Elevação (m)"
-    if exagero_vertical > 1:
-        z_label += " · exagero visual {}x".format(exagero_vertical)
-
-    fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="Leste (m)",
-            yaxis_title="Norte (m)",
-            zaxis_title=z_label,
-            aspectmode="manual",
-            aspectratio=_aspecto_cena(mx, my, exagero_vertical),
-            camera=dict(eye=dict(x=1.5, y=-1.5, z=0.85)),
-        ),
-        template=_TEMPLATE,
-        height=700,
-        margin=dict(l=40, r=20, b=40, t=70),
-        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
-    )
-    return fig
 
 
 _COR_GREIDE = "#9aa3ab"  # cinza concreto do greide acabado
-
-
-def _skirt_taludes(grade, cota: float, ox: float, oy: float,
-                   ratio_corte: float, ratio_aterro: float):
-    """Saias de talude do greide: liga a aresta do plato (na cota) ao terreno.
-
-    Para cada vertice da borda, projeta um ponto de offset (daylight) para
-    fora do lote, a uma distancia = altura * (H/V), na elevacao natural.
-    Constroi uma tira (Mesh3d) entre o anel interno (cota) e o externo.
-    """
-    borda = grade.pontos_borda
-    if borda is None or len(borda) < 3:
-        return None
-
-    xy = borda[:, :2].astype(float)
-    ez = borda[:, 2].astype(float)
-    centro = xy.mean(axis=0)
-    fora = xy - centro
-    norma = np.linalg.norm(fora, axis=1, keepdims=True)
-    norma[norma == 0] = 1.0
-    fora = fora / norma
-
-    dh = ez - cota                                    # >0 corte, <0 aterro
-    run = np.where(dh > 0, dh * ratio_corte, -dh * ratio_aterro)
-
-    inner = np.column_stack([xy[:, 0] - ox, xy[:, 1] - oy, np.full(len(xy), float(cota))])
-    outer = np.column_stack([xy[:, 0] - ox + fora[:, 0] * run,
-                             xy[:, 1] - oy + fora[:, 1] * run, ez])
-
-    n = len(inner)
-    verts = np.vstack([inner, outer])
-    i_idx, j_idx, k_idx = [], [], []
-    for s in range(n):
-        a, b = s, (s + 1) % n
-        c, d = b + n, s + n
-        i_idx += [a, a]
-        j_idx += [b, c]
-        k_idx += [c, d]
-
-    return go.Mesh3d(
-        x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
-        i=i_idx, j=j_idx, k=k_idx,
-        color=_COR_GREIDE, opacity=0.95, name="Taludes",
-        flatshading=True, showlegend=True,
-        lighting=dict(ambient=0.7, diffuse=0.5, specular=0.05),
-    )
-
-
-def criar_terreno_greide_3d(
-    superficie: SuperficieTerreno,
-    grade: Optional[GradePoligono] = None,
-    cota_projeto: float = 0.0,
-    talude_corte_h: float = 1.0,
-    talude_corte_v: float = 1.0,
-    talude_aterro_h: float = 2.0,
-    talude_aterro_v: float = 1.0,
-    titulo: str = "Terreno e Greide de Projeto",
-    exagero_vertical: int = 1,
-) -> go.Figure:
-    """Vista unificada: Terreno Existente (EG) x Greide de Projeto (FG).
-
-    - EG: terreno natural translucido, colorido por corte/aterro, com a
-      linha de interseccao na cota.
-    - FG: o greide solido = plato plano na cota + saias de talude que
-      amarram no terreno natural nas bordas.
-    """
-    fig = go.Figure()
-    ox, oy = _offset_xy(superficie)
-
-    z_full = superficie.elevacao_malha.astype(float)
-    mx, my, z_eg, delta = _decimar(
-        superficie.malha_x - ox, superficie.malha_y - oy,
-        z_full, z_full - float(cota_projeto),
-    )
-    maxabs = float(np.nanmax(np.abs(delta))) or 1.0
-
-    # ── EG: terreno existente (translucido, corte/aterro) ──
-    fig.add_trace(go.Surface(
-        x=mx, y=my, z=z_eg, surfacecolor=delta,
-        colorscale=_ESCALA_CORTE_ATERRO, cmin=-maxabs, cmid=0.0, cmax=maxabs,
-        opacity=0.5, name="Terreno existente",
-        colorbar=dict(title="Corte (+) / Aterro (−) (m)", thickness=14),
-        connectgaps=False,
-        contours=_contorno_intersecao(z_eg, cota_projeto),
-        hoverinfo="x+y+z",
-    ))
-
-    # ── FG: plato plano (greide) na cota, recortado ao lote ──
-    z_pad = np.where(~np.isnan(z_eg), float(cota_projeto), np.nan)
-    fig.add_trace(go.Surface(
-        x=mx, y=my, z=z_pad,
-        colorscale=[[0, _COR_GREIDE], [1, _COR_GREIDE]], showscale=False,
-        opacity=0.95, name="Greide (plato)", connectgaps=False, hoverinfo="name",
-        lighting=dict(ambient=0.8, diffuse=0.4, specular=0.05),
-    ))
-
-    # ── FG: saias de talude + borda do plato ──
-    if grade is not None:
-        skirt = _skirt_taludes(
-            grade, float(cota_projeto), ox, oy,
-            talude_corte_h / talude_corte_v,
-            talude_aterro_h / talude_aterro_v,
-        )
-        if skirt is not None:
-            fig.add_trace(skirt)
-        borda = grade.pontos_borda
-        bf = np.vstack([borda, borda[0:1]])
-        fig.add_trace(go.Scatter3d(
-            x=bf[:, 0] - ox, y=bf[:, 1] - oy,
-            z=np.full(len(bf), float(cota_projeto)),
-            mode="lines", line=dict(color=CORES["borda"], width=3),
-            name="Borda do plato",
-        ))
-
-    _arrow_norte_3d(fig, mx, my, float(np.nanmin(z_eg)))
-
-    z_label = "Elevação (m)"
-    if exagero_vertical > 1:
-        z_label += " · exagero visual {}x".format(exagero_vertical)
-
-    fig.update_layout(
-        title=titulo,
-        scene=dict(
-            xaxis_title="Leste (m)",
-            yaxis_title="Norte (m)",
-            zaxis_title=z_label,
-            aspectmode="manual",
-            aspectratio=_aspecto_cena(mx, my, exagero_vertical),
-            camera=dict(eye=dict(x=1.5, y=-1.5, z=0.85)),
-        ),
-        template=_TEMPLATE,
-        height=720,
-        margin=dict(l=40, r=20, b=40, t=70),
-        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"),
-    )
-    return fig
-
-
 _COR_TALUDE_CORTE = "#e07b54"   # laranja terroso (corte)
 _COR_TALUDE_ATERRO = "#5b9bd5"  # azul (aterro)
 
@@ -817,74 +588,6 @@ def criar_corte_aterro_3d(
     return fig
 
 
-def criar_perfil_transversal(
-    superficie: SuperficieTerreno,
-    grade: GradePoligono,
-    cota_projeto: float,
-    posicao_y: Optional[float] = None,
-    remocao_vegetal: float = 0.30,
-    talude_corte: tuple = (1, 1),
-    talude_aterro: tuple = (1, 2),
-    titulo: str = "Perfil Transversal",
-) -> go.Figure:
-    """Cria perfil transversal em uma posicao Y fixa."""
-    pontos = superficie.pontos_grade_xy
-    elevacoes = superficie.elevacao_grade
-    ox = float(pontos[:, 0].min())
-
-    if posicao_y is None:
-        posicao_y = np.median(pontos[:, 1])
-
-    tolerancia = grade.espacamento * 0.6
-    mascara = np.abs(pontos[:, 1] - posicao_y) < tolerancia
-    if mascara.sum() < 2:
-        tolerancia = grade.espacamento * 1.5
-        mascara = np.abs(pontos[:, 1] - posicao_y) < tolerancia
-
-    xs = pontos[mascara, 0] - ox
-    zs = elevacoes[mascara]
-    ordem = np.argsort(xs)
-    xs = xs[ordem]
-    zs = zs[ordem]
-
-    # Delta relativo a cota do projeto (+ aterro, - corte)
-    zs_ajustado = zs - remocao_vegetal
-    delta = cota_projeto - zs_ajustado
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(
-        x=xs, y=delta, mode="lines", name="Delta (cota - terreno)",
-        line=dict(color=CORES["terreno"], width=2),
-    ))
-
-    fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1,
-                  annotation_text="Cota projeto")
-
-    corte_y = np.where(delta < 0, delta, 0)
-    aterro_y = np.where(delta > 0, delta, 0)
-
-    fig.add_trace(go.Scatter(
-        x=xs, y=corte_y, fill="tozeroy",
-        fillcolor="rgba(225,29,72,0.15)", line=dict(width=0), name="Corte",
-    ))
-    fig.add_trace(go.Scatter(
-        x=xs, y=aterro_y, fill="tozeroy",
-        fillcolor="rgba(99,102,241,0.15)", line=dict(width=0), name="Aterro",
-    ))
-
-    oy = float(superficie.pontos_grade_xy[:, 1].min())
-    fig.update_layout(
-        title="{} (Y = {:.1f}m)".format(titulo, posicao_y - oy),
-        xaxis_title="X (m)",
-        yaxis_title="Altura (m) [+ aterro / - corte]",
-        template=_TEMPLATE,
-        height=500,
-        legend=dict(x=0.01, y=0.99),
-    )
-    return fig
-
-
 def criar_diagrama_bruckner(
     resultado: ResultadoBruckner,
     titulo: str = "Diagrama de Bruckner",
@@ -925,12 +628,24 @@ def criar_diagrama_bruckner(
             annotation_text="{:.1f}m".format(eq - pos_min),
         )
 
-    if dlt is not None:
-        fig.add_hline(
-            y=dlt, line_dash="dash", line_color="orange", line_width=2,
-            annotation_text="DLT",
-            annotation_position="top left",
-        )
+    # DLT e uma DISTANCIA: desenhada como regua no eixo de posicoes,
+    # nao como linha no eixo de volume.
+    if dlt is not None and dlt > 0 and len(vol) > 0:
+        v_min = float(np.min(vol))
+        v_max = float(np.max(vol))
+        folga = (v_max - v_min) * 0.06 or 1.0
+        y_regua = v_min - folga
+        fig.add_trace(go.Scatter(
+            x=[0, dlt], y=[y_regua, y_regua],
+            mode="lines+markers+text",
+            line=dict(color="orange", width=3),
+            marker=dict(symbol="line-ns-open", size=10, color="orange"),
+            text=["", "DLT = {:,.0f} m".format(dlt)],
+            textposition="middle right",
+            textfont=dict(color="orange", size=11),
+            name="DLT (dist. limite)",
+            hoverinfo="name",
+        ))
 
     if posicao_destaque is not None:
         pos_rel = posicao_destaque - pos_min
@@ -949,67 +664,6 @@ def criar_diagrama_bruckner(
         template=_TEMPLATE,
         height=500,
     )
-    return fig
-
-
-def criar_tabela_volumes(
-    resultados: List[ResultadoVolume],
-    titulo: str = "Resumo de volumes",
-) -> go.Figure:
-    """Cria tabela formatada com volumes."""
-    headers = [
-        "Poligono", "Area (m\u00b2)", "Corte bruto (m\u00b3)",
-        "Aterro bruto (m\u00b3)", "Corte empolado (m\u00b3)",
-        "Aterro compact. (m\u00b3)", "Bota-fora (m\u00b3)",
-        "Solo import. (m\u00b3)", "Balanco (m\u00b3)",
-    ]
-
-    valores = [[] for _ in headers]
-    for r in resultados:
-        valores[0].append(r.nome_poligono)
-        valores[1].append("{:,.1f}".format(r.area_total))
-        valores[2].append("{:,.2f}".format(r.volume_corte_bruto))
-        valores[3].append("{:,.2f}".format(r.volume_aterro_bruto))
-        valores[4].append("{:,.2f}".format(r.volume_corte_empolado))
-        valores[5].append("{:,.2f}".format(r.volume_aterro_compactado))
-        valores[6].append("{:,.2f}".format(r.volume_bota_fora))
-        valores[7].append("{:,.2f}".format(r.volume_solo_importado))
-        valores[8].append("{:,.2f}".format(r.balanco_massa))
-
-    # Linha de totais
-    valores[0].append("<b>TOTAL</b>")
-    valores[1].append("<b>{:,.1f}</b>".format(sum(r.area_total for r in resultados)))
-    valores[2].append("<b>{:,.2f}</b>".format(sum(r.volume_corte_bruto for r in resultados)))
-    valores[3].append("<b>{:,.2f}</b>".format(sum(r.volume_aterro_bruto for r in resultados)))
-    valores[4].append("<b>{:,.2f}</b>".format(sum(r.volume_corte_empolado for r in resultados)))
-    valores[5].append("<b>{:,.2f}</b>".format(sum(r.volume_aterro_compactado for r in resultados)))
-    valores[6].append("<b>{:,.2f}</b>".format(sum(r.volume_bota_fora for r in resultados)))
-    valores[7].append("<b>{:,.2f}</b>".format(sum(r.volume_solo_importado for r in resultados)))
-    valores[8].append("<b>{:,.2f}</b>".format(sum(r.balanco_massa for r in resultados)))
-
-    n_linhas = len(resultados) + 1
-    cores_linhas = [["#F5F5F5", "white"] * ((n_linhas + 1) // 2) for _ in headers]
-    # Destaca ultima linha (totais) com azul claro
-    for col in cores_linhas:
-        if len(col) >= n_linhas:
-            col[n_linhas - 1] = "#E3F2FD"
-
-    fig = go.Figure(data=[go.Table(
-        header=dict(
-            values=headers,
-            fill_color="#1565C0",
-            font=dict(color="white", size=12),
-            align="center",
-        ),
-        cells=dict(
-            values=valores,
-            fill_color=cores_linhas,
-            align="center",
-            font=dict(size=11),
-        ),
-    )])
-
-    fig.update_layout(title=titulo, height=max(300, 100 + 40 * n_linhas))
     return fig
 
 

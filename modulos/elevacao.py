@@ -7,7 +7,8 @@ Baseado no padrao do repositorio kml-earthworks.
 import io
 import time
 import math
-from typing import List, Optional, Tuple
+from collections import OrderedDict
+from typing import List, Optional
 
 import numpy as np
 import requests
@@ -19,8 +20,10 @@ _TAMANHO_LOTE = 100  # pontos por requisicao
 _TIMEOUT_CONEXAO = 3
 _TIMEOUT_LEITURA = 10
 
-# Cache de tiles Copernicus (chave = (lat_floor, lon_floor))
-_cache_tiles_copernicus = {}
+# Cache LRU de tiles Copernicus (chave = (lat_floor, lon_floor)).
+# Cada tile ocupa ~50 MB em memoria; o limite evita OOM no Streamlit Cloud.
+_MAX_TILES_CACHE = 6
+_cache_tiles_copernicus = OrderedDict()
 
 _COPERNICUS_URL = (
     "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/"
@@ -49,6 +52,7 @@ def _baixar_tile_copernicus(lat_floor: int, lon_floor: int) -> Optional[np.ndarr
     """
     chave = (lat_floor, lon_floor)
     if chave in _cache_tiles_copernicus:
+        _cache_tiles_copernicus.move_to_end(chave)
         return _cache_tiles_copernicus[chave]
 
     url = _copernicus_tile_url(lat_floor, lon_floor)
@@ -61,18 +65,26 @@ def _baixar_tile_copernicus(lat_floor: int, lon_floor: int) -> Optional[np.ndarr
     try:
         resp = requests.get(url, timeout=(5, 120))
         if resp.status_code != 200:
-            _cache_tiles_copernicus[chave] = None
+            _guardar_tile_cache(chave, None)
             return None
 
         with tifffile.TiffFile(io.BytesIO(resp.content)) as tif:
             data = tif.pages[0].asarray()
 
-        _cache_tiles_copernicus[chave] = data
+        _guardar_tile_cache(chave, data)
         return data
 
     except Exception:
-        _cache_tiles_copernicus[chave] = None
+        _guardar_tile_cache(chave, None)
         return None
+
+
+def _guardar_tile_cache(chave, data) -> None:
+    """Insere tile no cache LRU, descartando o mais antigo se exceder o limite."""
+    _cache_tiles_copernicus[chave] = data
+    _cache_tiles_copernicus.move_to_end(chave)
+    while len(_cache_tiles_copernicus) > _MAX_TILES_CACHE:
+        _cache_tiles_copernicus.popitem(last=False)
 
 
 def _amostrar_elevacao_tile(
@@ -393,6 +405,10 @@ def completar_elevacao_poligono(
                 f"Poligono '{poligono.nome}': {ausentes}/{total} pontos "
                 f"({taxa:.0%}) sem elevacao. Limite maximo e 10%."
             )
+        # Pontos restantes sem elevacao herdam a do vizinho valido mais
+        # proximo. Sem isso, virariam cota 0.0 m na conversao UTM e
+        # contaminariam toda a interpolacao do terreno.
+        _preencher_ausentes_por_vizinho(novos_pontos)
 
     return PoligonoKML(
         nome=poligono.nome,
@@ -400,6 +416,47 @@ def completar_elevacao_poligono(
         arquivo_origem=poligono.arquivo_origem,
         tem_elevacao=True,
     )
+
+
+def _preencher_ausentes_por_vizinho(pontos: List[PontoKML]) -> None:
+    """Preenche elevacao None com a do ponto valido geograficamente mais proximo."""
+    validos = [p for p in pontos if p.elevacao is not None]
+    if not validos:
+        return
+    for p in pontos:
+        if p.elevacao is None:
+            mais_proximo = min(
+                validos,
+                key=lambda v: (v.latitude - p.latitude) ** 2
+                + (v.longitude - p.longitude) ** 2,
+            )
+            p.elevacao = mais_proximo.elevacao
+
+
+def obter_elevacao_grade_dem(latitudes: np.ndarray, longitudes: np.ndarray) -> np.ndarray:
+    """Amostra elevacao dos pontos internos da grade direto dos tiles Copernicus.
+
+    Pensada para milhares de pontos: usa apenas os tiles ja baixados/cacheados
+    (sem martelar as APIs REST de fallback). Pontos sem dado retornam NaN e
+    devem ser preenchidos por interpolacao a partir da borda.
+
+    Returns:
+        Array float com elevacoes (NaN onde indisponivel).
+    """
+    n = len(latitudes)
+    elevacoes = np.full(n, np.nan)
+
+    for i in range(n):
+        lat = float(latitudes[i])
+        lon = float(longitudes[i])
+        tile = _baixar_tile_copernicus(math.floor(lat), math.floor(lon))
+        if tile is None:
+            continue
+        val = _amostrar_elevacao_tile(tile, lat, lon, math.floor(lat), math.floor(lon))
+        if val is not None:
+            elevacoes[i] = val
+
+    return elevacoes
 
 
 def _extrair_cooldown(resp: requests.Response) -> float:

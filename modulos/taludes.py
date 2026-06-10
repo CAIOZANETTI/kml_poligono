@@ -1,7 +1,5 @@
 """Calculo de taludes de corte e aterro nas bordas do poligono."""
 
-from typing import Tuple
-
 import numpy as np
 
 from modulos.geometria import GradePoligono
@@ -119,30 +117,3 @@ def calcular_volume_talude_aterro(
     return volume
 
 
-def calcular_extensao_talude(
-    altura: float,
-    inclinacao_h: float,
-    inclinacao_v: float,
-) -> float:
-    """Calcula extensao horizontal de um talude.
-
-    extensao = altura * (H / V)
-    """
-    return altura * (inclinacao_h / inclinacao_v)
-
-
-def gerar_perfil_talude(
-    altura: float,
-    inclinacao_h: float,
-    inclinacao_v: float,
-    num_pontos: int = 50,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Gera coordenadas x, y do perfil de um talude para visualizacao.
-
-    Returns:
-        (x_perfil, y_perfil) arrays com coordenadas do talude.
-    """
-    extensao = calcular_extensao_talude(altura, inclinacao_h, inclinacao_v)
-    x = np.linspace(0, extensao, num_pontos)
-    y = x * (inclinacao_v / inclinacao_h)
-    return x, y

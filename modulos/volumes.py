@@ -165,11 +165,20 @@ def calcular_cota_otima(
     categoria: CategoriaSolo = CategoriaSolo.PRIMEIRA,
     tolerancia: float = 0.001,
     nome_poligono: str = "",
+    talude_corte_h: float = 1.0,
+    talude_corte_v: float = 1.0,
+    talude_aterro_h: float = 2.0,
+    talude_aterro_v: float = 1.0,
+    grade: Optional[GradePoligono] = None,
 ) -> Tuple[float, ResultadoVolume]:
     """Calcula cota otima onde corte ajustado = aterro ajustado.
 
     Usa biseccao (binary search). A funcao de balanco e monotonicamnete
     decrescente: cota mais alta -> mais aterro, menos corte.
+
+    Quando ``grade`` e fornecida, os volumes de talude das bordas entram
+    no balanco e no resultado final — mesma base de calculo do fluxo de
+    cota manual.
 
     Args:
         tolerancia: Tolerancia de convergencia em m3.
@@ -177,6 +186,8 @@ def calcular_cota_otima(
     Returns:
         (cota_otima, resultado_volume)
     """
+    from modulos.taludes import identificar_celulas_borda
+
     elevacoes = superficie.elevacao_grade
     mascara_valida = ~np.isnan(elevacoes)
     elev_validas = elevacoes[mascara_valida]
@@ -193,6 +204,15 @@ def calcular_cota_otima(
             remocao_vegetal, categoria, nome_poligono,
         )
         return cota_padrao, resultado
+
+    # Elevacoes das celulas de borda (para o termo de talude do balanco)
+    elev_borda = None
+    razao_corte = talude_corte_h / talude_corte_v
+    razao_aterro = talude_aterro_h / talude_aterro_v
+    if grade is not None:
+        borda = identificar_celulas_borda(grade)
+        elev_borda = elevacoes[borda & mascara_valida]
+
     margem = 2.0
     cota_min = float(np.nanmin(elev_validas)) - margem
     cota_max = float(np.nanmax(elev_validas)) + margem
@@ -203,6 +223,7 @@ def calcular_cota_otima(
         balanco = _funcao_balanco(
             cota_meio, elev_validas, area_celula,
             remocao_vegetal, fator_emp, fator_hom,
+            elev_borda, razao_corte, razao_aterro, espacamento,
         )
 
         if abs(balanco) < tolerancia:
@@ -216,6 +237,11 @@ def calcular_cota_otima(
     resultado = calcular_volumes(
         superficie, cota_meio, espacamento,
         remocao_vegetal, categoria, nome_poligono,
+        talude_corte_h=talude_corte_h,
+        talude_corte_v=talude_corte_v,
+        talude_aterro_h=talude_aterro_h,
+        talude_aterro_v=talude_aterro_v,
+        grade=grade,
     )
     return cota_meio, resultado
 
@@ -227,17 +253,30 @@ def _funcao_balanco(
     remocao_vegetal: float,
     fator_empolamento: float,
     fator_homogeneizacao: float,
+    elev_borda: Optional[np.ndarray] = None,
+    razao_corte: float = 1.0,
+    razao_aterro: float = 2.0,
+    espacamento: float = 10.0,
 ) -> float:
     """Funcao auxiliar: retorna balanco de massa para uma dada cota.
 
     f(cota) = corte*empolamento - aterro*homogeneizacao
-    Monotonicamnete decrescente em cota.
+    Monotonicamnete decrescente em cota. Inclui os prismas de talude das
+    bordas quando ``elev_borda`` e fornecida (mesma formula de
+    modulos.taludes).
     """
     terreno_ajustado = elevacoes - remocao_vegetal
     delta = cota - terreno_ajustado
 
     corte = float(np.sum(np.abs(delta[delta < 0])) * area_celula)
     aterro = float(np.sum(delta[delta > 0]) * area_celula)
+
+    if elev_borda is not None and len(elev_borda) > 0:
+        delta_b = cota - (elev_borda - remocao_vegetal)
+        h_corte = np.abs(delta_b[delta_b < 0])
+        h_aterro = delta_b[delta_b > 0]
+        corte += float(np.sum(0.5 * h_corte ** 2 * razao_corte * espacamento))
+        aterro += float(np.sum(0.5 * h_aterro ** 2 * razao_aterro * espacamento))
 
     return corte * fator_empolamento - aterro * fator_homogeneizacao
 

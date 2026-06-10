@@ -71,7 +71,7 @@ st.download_button(
     data=relatorios["gerencial"].encode("utf-8"),
     file_name="memorial_gerencial_terraplenagem.html",
     mime="text/html",
-    use_container_width=True,
+    width="stretch",
 )
 
 st.download_button(
@@ -79,7 +79,7 @@ st.download_button(
     data=relatorios["analitico"].encode("utf-8"),
     file_name="memorial_analitico_terraplenagem.html",
     mime="text/html",
-    use_container_width=True,
+    width="stretch",
 )
 
 # AJUSTE 7: num_faixas from session_state
@@ -132,5 +132,5 @@ st.download_button(
     data=buffer_xlsx.getvalue(),
     file_name="terraplenagem_volumes.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
+    width="stretch",
 )

@@ -145,6 +145,11 @@ if arquivos_kml:
         st.session_state.pop("dados_json", None)
     st.session_state["kml_bytes"] = novos_bytes
 
+# O espacamento define a propria grade: se mudou, reprocessa do zero.
+_dados_json = st.session_state.get("dados_json")
+if _dados_json and _dados_json.get("espacamento") != espacamento:
+    st.session_state.pop("dados_json", None)
+
 if not processar_poligonos():
     st.info("Faca upload de arquivos KML acima para comecar.")
     st.stop()
@@ -155,9 +160,9 @@ grades = dados["grades"]
 superficies = dados["superficies"]
 resultados = dados["resultados"]
 cotas = dados["cotas"]
-espacamento = dados["espacamento"]
-remocao_vegetal = dados["remocao_vegetal"]
-categoria_solo = dados["categoria_solo"]
+# Remocao vegetal e categoria do solo usam os valores ATUAIS dos widgets:
+# o loop abaixo recalcula os volumes e salva, refletindo mudancas feitas
+# depois do upload.
 
 # ─── Poligonos Carregados ───
 st.subheader("Poligonos carregados ({})".format(len(poligonos)))
@@ -190,6 +195,11 @@ for poly in poligonos:
             cota_ot, res_ot = calcular_cota_otima(
                 superficie, espacamento, remocao_vegetal,
                 categoria_solo, nome_poligono=nome,
+                talude_corte_h=parametros.talude_corte_h,
+                talude_corte_v=parametros.talude_corte_v,
+                talude_aterro_h=parametros.talude_aterro_h,
+                talude_aterro_v=parametros.talude_aterro_v,
+                grade=grade,
             )
             st.success("cota otima: **{:.2f} m** (balanco: {:.2f} m\u00b3)".format(
                 cota_ot, res_ot.balanco_massa

@@ -38,14 +38,18 @@ Sistema Streamlit para calculo de corte e aterro de poligonos importados via KML
 
 ## Fonte de elevacao
 
-Cadeia de fallback automatica:
+Cadeia de fallback automatica para os vertices do poligono:
 
 1. **Copernicus DEM GLO-30** - 30m, +-4m vertical, tiles AWS S3 gratuitos (missao TanDEM-X)
 2. **Open-Meteo** - SRTM 90m via API REST
 3. **OpenTopoData** - SRTM 30m via API REST
 4. **Google Maps** - API paga (opcional, requer chave)
 
-Para projeto executivo, recomenda-se importar KML com elevacao de levantamento topografico RTK (+-2cm).
+Quando a elevacao vem do DEM (KML sem altitude), os **pontos internos da
+grade tambem sao amostrados direto dos tiles Copernicus** — o relevo interno
+real do lote e capturado, em vez de interpolado so a partir da borda.
+
+Para projeto executivo, recomenda-se importar KML com elevacao de levantamento topografico RTK (+-2cm); nesse caso o interior e interpolado a partir dos vertices levantados.
 
 ## Stack
 
@@ -56,6 +60,14 @@ Python, Streamlit, Plotly, NumPy, SciPy, Shapely, utm, tifffile
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
+```
+
+## Testes
+
+```bash
+pip install pytest
+python -m pytest tests/ -q          # suite completa
+python -m pytest tests/ -q -m "not rede"  # sem testes que dependem de internet
 ```
 
 ## Normas de referencia
